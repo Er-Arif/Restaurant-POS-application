@@ -36,6 +36,11 @@ from pos_system.models.enums import PaymentMethod, UserRole
 
 
 class MoneySpinBox(QDoubleSpinBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimum(0)
+        self.setSpecialValueText("")
+
     def focusInEvent(self, event):
         super().focusInEvent(event)
         line_edit = self.lineEdit()
@@ -47,6 +52,11 @@ class MoneySpinBox(QDoubleSpinBox):
         line_edit = self.lineEdit()
         if line_edit is not None:
             line_edit.selectAll()
+
+    def textFromValue(self, value):
+        if abs(value) < 0.0000001:
+            return ""
+        return super().textFromValue(value)
 
 
 class ActivationScreen(QWidget):
@@ -342,6 +352,9 @@ class AdminDashboardWindow(QMainWindow):
         self.menu_items_table = QTableWidget(0, 5)
         self.menu_items_table.setHorizontalHeaderLabels(["ID", "Name", "Category", "Price", "Available"])
         self.menu_items_table.horizontalHeader().setStretchLastSection(True)
+        self.menu_items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.menu_items_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.menu_items_table.setSelectionMode(QAbstractItemView.SingleSelection)
         item_layout.addLayout(form)
         item_layout.addLayout(item_actions)
         item_layout.addWidget(self.menu_items_table)

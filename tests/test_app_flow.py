@@ -194,8 +194,9 @@ class AppFlowTests(unittest.TestCase):
         self.assertEqual(len(categories), 2)
         self.assertFalse(mock_warning.called)
 
+    @patch.object(QMessageBox, "information")
     @patch.object(QMessageBox, "warning")
-    def test_user_management_requires_admin_password_and_supports_update(self, mock_warning):
+    def test_user_management_requires_admin_password_and_supports_update(self, mock_warning, mock_info):
         self._activate_license()
         SettingsService().save_settings({"restaurant_name": "Users Cafe", "setup_complete": True})
         auth = AuthService()
