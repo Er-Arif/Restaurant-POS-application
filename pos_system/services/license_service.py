@@ -5,6 +5,7 @@ import hashlib
 import json
 from datetime import UTC, date, datetime, timedelta
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -80,12 +81,15 @@ class LicenseService:
         signed_payload = dict(payload)
         signed_payload.pop("signature")
         message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        public_key.verify(
-            signature,
-            message,
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-            hashes.SHA256(),
-        )
+        try:
+            public_key.verify(
+                signature,
+                message,
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                hashes.SHA256(),
+            )
+        except InvalidSignature as exc:
+            raise ValueError("License signature is invalid.") from exc
         if payload["hardware_fingerprint"] != self.get_hardware_fingerprint():
             raise ValueError("License does not match this machine.")
         expiry = self._parse_expiry(payload.get("expiry_date"))

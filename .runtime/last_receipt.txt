@@ -1,0 +1,19 @@
+Chandiwala
+Gandhi Chowk
+Phone: 9122623002
+GST: 
+------------------------------------
+Order: T4-20260407184644
+Table: T4
+Cashier: arif
+------------------------------------
+Noodles x1 ₹80.00
+Ice Cream x1 ₹100.00
+------------------------------------
+Subtotal: ₹180.00
+Discount: ₹0.00
+Service: ₹10.00
+GST: ₹34.20
+Total: ₹224.20
+------------------------------------
+Thank you for dining with us!
