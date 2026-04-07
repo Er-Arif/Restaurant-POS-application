@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from license_generator import create_license, generate_keypair  # noqa: E402
@@ -96,8 +97,8 @@ class AppFlowTests(unittest.TestCase):
                 "setup_complete": True,
             }
         )
-        admin = auth.create_user("adminflow", "pass123", UserRole.ADMIN)
-        staff = auth.create_user("staffflow", "pass123", UserRole.STAFF)
+        admin = auth.create_user("adminflow", "pass123", UserRole.ADMIN, full_name="Admin Flow")
+        staff = auth.create_user("staffflow", "pass123", UserRole.STAFF, full_name="Staff Flow")
         table_rows = tables.initialize_tables(2, "T")
         category = menu.save_category("Main")
         item = menu.save_menu_item({"category_id": category["id"], "name": "Burger", "description": "", "price": 150, "is_available": True})
@@ -149,23 +150,140 @@ class AppFlowTests(unittest.TestCase):
 
     @patch.object(QMessageBox, "information")
     @patch.object(QMessageBox, "warning")
-    def test_admin_controller_happy_path(self, mock_warning, mock_info):
+    def test_category_add_mode_requires_new_category_action(self, mock_warning, mock_info):
         self._activate_license()
-        SettingsService().save_settings({"restaurant_name": "Admin Cafe", "setup_complete": True})
-        AuthService().create_user("admin", "pass123", UserRole.ADMIN)
+        SettingsService().save_settings({"restaurant_name": "Category Cafe", "setup_complete": True})
+        auth = AuthService()
+        auth.create_user("admincat", "pass123", UserRole.ADMIN)
 
         window = AdminDashboardWindow()
         controller = AdminController(
             window=window,
-            auth_service=AuthService(),
+            auth_service=auth,
             settings_service=SettingsService(),
             menu_service=MenuService(),
             order_service=OrderService(),
             report_service=ReportService(),
             backup_service=BackupService(),
             table_service=TableService(),
+            session_user=auth.login("admincat", "pass123"),
         )
         controller.load()
+
+        self.assertEqual(window.save_category_button.text(), "Add Category")
+        window.category_name.setText("Starters")
+        window.category_description.setPlainText("Snacks")
+        controller.save_category()
+        categories = MenuService().list_categories()
+        self.assertEqual(len(categories), 1)
+        self.assertEqual(categories[0]["name"], "Starters")
+        self.assertEqual(window.save_category_button.text(), "Update Category")
+
+        window.category_name.setText("Starters Updated")
+        controller.save_category()
+        categories = MenuService().list_categories()
+        self.assertEqual(len(categories), 1)
+        self.assertEqual(categories[0]["name"], "Starters Updated")
+
+        controller.clear_category_form()
+        self.assertEqual(window.save_category_button.text(), "Add Category")
+        window.category_name.setText("Beverages")
+        window.category_description.setPlainText("Drinks")
+        controller.save_category()
+        categories = MenuService().list_categories()
+        self.assertEqual(len(categories), 2)
+        self.assertFalse(mock_warning.called)
+
+    @patch.object(QMessageBox, "warning")
+    def test_user_management_requires_admin_password_and_supports_update(self, mock_warning):
+        self._activate_license()
+        SettingsService().save_settings({"restaurant_name": "Users Cafe", "setup_complete": True})
+        auth = AuthService()
+        auth.create_user("admin", "pass123", UserRole.ADMIN, full_name="Admin User")
+
+        window = AdminDashboardWindow()
+        controller = AdminController(
+            window=window,
+            auth_service=auth,
+            settings_service=SettingsService(),
+            menu_service=MenuService(),
+            order_service=OrderService(),
+            report_service=ReportService(),
+            backup_service=BackupService(),
+            table_service=TableService(),
+            session_user=auth.login("admin", "pass123"),
+        )
+        controller.load()
+
+        self.assertEqual(window.save_user_button.text(), "Create User")
+        self.assertEqual(window.clear_user_button.text(), "Add New User")
+        window.user_full_name.setText("Aman Khan")
+        window.user_username.setText("aman")
+        window.user_password.setText("pass123")
+        window.user_role.setCurrentText("staff")
+        controller.save_user()
+        mock_warning.assert_called_once()
+        self.assertIn("admin password", mock_warning.call_args.args[2].lower())
+        self.assertEqual(len(auth.list_users()), 1)
+
+        mock_warning.reset_mock()
+        window.user_admin_password.setText("pass123")
+        controller.save_user()
+        users = auth.list_users()
+        self.assertEqual(len(users), 2)
+        created = next(user for user in users if user["username"] == "aman")
+        self.assertEqual(created["full_name"], "Aman Khan")
+        self.assertEqual(window.save_user_button.text(), "Create User")
+        self.assertEqual(window.user_password.placeholderText(), "Required for a new user")
+
+        for row in range(window.users_table.rowCount()):
+            if window.users_table.item(row, 0).data(Qt.UserRole) == created["id"]:
+                window.users_table.selectRow(row)
+                break
+        controller.on_user_selected()
+        self.assertEqual(window.save_user_button.text(), "Update User")
+        self.assertEqual(window.user_password.placeholderText(), "Leave blank to keep the current password")
+        self.assertEqual(window.user_username.text(), "aman")
+
+        window.user_username.setText("aman.staff")
+        window.user_password.setText("newpass123")
+        window.user_admin_password.setText("wrongpass")
+        controller.save_user()
+        mock_warning.assert_called_once()
+        self.assertIn("incorrect", mock_warning.call_args.args[2].lower())
+
+        mock_warning.reset_mock()
+        window.user_admin_password.setText("pass123")
+        controller.save_user()
+        updated = next(user for user in auth.list_users() if user["id"] == created["id"])
+        self.assertEqual(updated["username"], "aman.staff")
+        self.assertEqual(auth.login("aman.staff", "newpass123").username, "aman.staff")
+
+    @patch.object(QMessageBox, "information")
+    @patch.object(QMessageBox, "warning")
+    def test_admin_controller_happy_path(self, mock_warning, mock_info):
+        self._activate_license()
+        SettingsService().save_settings({"restaurant_name": "Admin Cafe", "setup_complete": True})
+        auth = AuthService()
+        auth.create_user("admin", "pass123", UserRole.ADMIN, full_name="Admin User")
+
+        window = AdminDashboardWindow()
+        controller = AdminController(
+            window=window,
+            auth_service=auth,
+            settings_service=SettingsService(),
+            menu_service=MenuService(),
+            order_service=OrderService(),
+            report_service=ReportService(),
+            backup_service=BackupService(),
+            table_service=TableService(),
+            session_user=auth.login("admin", "pass123"),
+        )
+        controller.load()
+        self.assertIn("Admin Cafe", window.overview_headline.text())
+        self.assertEqual(window.overview_orders_today_value.text(), "0")
+        window.overview_users_button.click()
+        self.assertIs(window.tabs.currentWidget(), window.users_tab)
 
         window.category_name.setText("Starters")
         window.category_description.setPlainText("Snacks")
@@ -179,15 +297,76 @@ class AppFlowTests(unittest.TestCase):
         controller.save_item()
         self.assertEqual(len(MenuService().list_menu_items()), 1)
 
+        window.user_full_name.setText("Staff One")
         window.user_username.setText("staff1")
         window.user_password.setText("pass123")
         window.user_role.setCurrentText("staff")
+        window.user_admin_password.setText("pass123")
         controller.save_user()
-        self.assertEqual(len(AuthService().list_users()), 2)
+        users = AuthService().list_users()
+        self.assertEqual(len(users), 2)
+        staff_user = next(user for user in users if user["username"] == "staff1")
+        self.assertEqual(staff_user["full_name"], "Staff One")
 
         window.settings_restaurant_name.setText("Admin Cafe Updated")
         controller.save_settings()
         self.assertEqual(SettingsService().get_settings()["restaurant_name"], "Admin Cafe Updated")
+        self.assertIn("Users:", window.overview_operations_summary.text())
+        self.assertFalse(mock_warning.called)
+
+    @patch.object(QMessageBox, "information")
+    @patch.object(QMessageBox, "warning")
+    @patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes)
+    def test_admin_orders_panel_manager_flow(self, mock_question, mock_warning, mock_info):
+        seeded = self._seed_ready_state()
+        order_service = OrderService()
+        payment_service = PaymentService()
+        auth = AuthService()
+
+        open_order = order_service.open_table_order(seeded["tables"][0]["id"], seeded["staff"]["id"])
+        order_service.add_item(open_order["id"], seeded["item"]["id"], qty=1)
+        paid_order = order_service.open_table_order(seeded["tables"][1]["id"], seeded["staff"]["id"])
+        paid_order = order_service.add_item(paid_order["id"], seeded["item"]["id"], qty=1)
+        payment_service.settle(paid_order["id"], "cash", 200)
+
+        window = AdminDashboardWindow()
+        controller = AdminController(
+            window=window,
+            auth_service=auth,
+            settings_service=SettingsService(),
+            menu_service=MenuService(),
+            order_service=OrderService(),
+            report_service=ReportService(),
+            backup_service=BackupService(),
+            table_service=TableService(),
+            session_user=auth.login("adminflow", "pass123"),
+        )
+        controller.load()
+
+        window.order_search.setText("T2")
+        controller.apply_order_filters()
+        self.assertEqual(window.orders_table.rowCount(), 1)
+        window.orders_table.selectRow(0)
+        controller.on_order_selected()
+        self.assertIn("Order #:", window.order_detail_summary.text())
+        self.assertIn("CASH", window.order_detail_payments.toPlainText())
+        self.assertTrue(window.print_order_receipt_button.isEnabled())
+        self.assertTrue(window.save_order_pdf_button.isEnabled())
+
+        controller.print_service.print_receipt_dialog = Mock(return_value="Receipt sent")
+        controller.print_service.save_receipt_pdf = Mock(return_value=Path("receipt.pdf"))
+        controller.print_selected_order_receipt()
+        controller.save_selected_order_pdf()
+        controller.print_service.print_receipt_dialog.assert_called_once()
+        controller.print_service.save_receipt_pdf.assert_called_once()
+
+        window.order_search.setText("T1")
+        controller.apply_order_filters()
+        window.orders_table.selectRow(0)
+        controller.on_order_selected()
+        self.assertTrue(window.cancel_order_button.isEnabled())
+        controller.cancel_selected_order()
+        self.assertGreaterEqual(mock_info.call_count, 3)
         self.assertFalse(mock_warning.called)
 
     @patch.object(QMessageBox, "information")
@@ -234,4 +413,3 @@ class AppFlowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

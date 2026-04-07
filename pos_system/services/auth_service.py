@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from sqlalchemy import select
 
@@ -14,8 +14,9 @@ class AuthService:
         with session_scope() as session:
             return session.scalar(select(User.id).limit(1)) is not None
 
-    def create_user(self, username: str, password: str, role: UserRole, is_active: bool = True) -> dict:
+    def create_user(self, username: str, password: str, role: UserRole, is_active: bool = True, full_name: str = "") -> dict:
         username = username.strip()
+        full_name = full_name.strip()
         if not username or not password:
             raise ValueError("Username and password are required.")
         with session_scope() as session:
@@ -23,6 +24,7 @@ class AuthService:
             if existing:
                 raise ValueError("Username already exists.")
             user = User(
+                full_name=full_name,
                 username=username,
                 password_hash=hash_password(password),
                 role=role,
@@ -32,8 +34,9 @@ class AuthService:
             session.flush()
             return self._serialize_user(user)
 
-    def update_user(self, user_id: int, username: str, role: UserRole, is_active: bool, password: str = "") -> dict:
+    def update_user(self, user_id: int, username: str, role: UserRole, is_active: bool, password: str = "", full_name: str = "") -> dict:
         username = username.strip()
+        full_name = full_name.strip()
         if not username:
             raise ValueError("Username is required.")
         with session_scope() as session:
@@ -43,6 +46,7 @@ class AuthService:
             collision = session.scalar(select(User).where(User.username == username, User.id != user_id))
             if collision:
                 raise ValueError("Username already exists.")
+            user.full_name = full_name
             user.username = username
             user.role = role
             user.is_active = is_active
@@ -65,10 +69,16 @@ class AuthService:
                 raise ValueError("This user account is inactive.")
             return SessionUser(user_id=user.id, username=user.username, role=user.role)
 
+    def verify_user_password(self, user_id: int, password: str) -> bool:
+        with session_scope() as session:
+            user = session.get(User, user_id)
+            return bool(user and verify_password(password, user.password_hash))
+
     @staticmethod
     def _serialize_user(user: User) -> dict:
         return {
             "id": user.id,
+            "full_name": user.full_name,
             "username": user.username,
             "role": user.role.value,
             "is_active": user.is_active,

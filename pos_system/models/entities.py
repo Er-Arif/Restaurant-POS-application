@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
@@ -27,6 +27,7 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, native_enum=False), nullable=False)
@@ -43,7 +44,7 @@ class RestaurantSettings(TimestampMixin, Base):
     address: Mapped[str] = mapped_column(Text, default="", nullable=False)
     phone: Mapped[str] = mapped_column(String(32), default="", nullable=False)
     gst_number: Mapped[str] = mapped_column(String(32), default="", nullable=False)
-    currency_symbol: Mapped[str] = mapped_column(String(8), default="₹", nullable=False)
+    currency_symbol: Mapped[str] = mapped_column(String(8), default="?", nullable=False)
     receipt_footer: Mapped[str] = mapped_column(Text, default="Thank you for dining with us!", nullable=False)
     gst_percent: Mapped[float] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     default_discount_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0, nullable=False)
@@ -156,3 +157,4 @@ class LicenseRecord(Base):
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     activated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive, nullable=False)
     last_validated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive, nullable=False)
+

@@ -103,6 +103,7 @@ class AppController:
                 password=screen.admin_password.text(),
                 role=UserRole.ADMIN,
                 is_active=True,
+                full_name=screen.admin_username.text(),
             )
             self.table_service.initialize_tables(screen.table_count.value(), screen.table_prefix.text() or "T")
             self.seed_default_categories()
@@ -138,6 +139,7 @@ class AppController:
             window=window,
             auth_service=self.auth_service,
             settings_service=self.settings_service,
+            session_user=session_user,
             menu_service=self.menu_service,
             order_service=self.order_service,
             report_service=self.report_service,
@@ -206,6 +208,7 @@ class AppController:
                 role=UserRole.ADMIN,
                 is_active=True,
                 password=self.DEV_ADMIN_PASSWORD,
+                full_name="Arif",
             )
         else:
             self.auth_service.create_user(
@@ -213,7 +216,9 @@ class AppController:
                 password=self.DEV_ADMIN_PASSWORD,
                 role=UserRole.ADMIN,
                 is_active=True,
+                full_name="Arif",
             )
         if not self.table_service.list_tables():
             self.table_service.initialize_tables(10, "T")
         self.seed_default_categories()
+
