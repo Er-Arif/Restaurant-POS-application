@@ -9,6 +9,7 @@ Windows-first offline restaurant POS built with Python, PySide6, SQLite, SQLAlch
 - Touch-friendly dine-in POS with one active ticket per table
 - White-label restaurant branding and receipt footer configuration
 - SQLite storage, CSV export, manual backup/restore, and receipt printing
+- Per-order archived receipt text files in the runtime receipts folder
 
 ## Project Structure
 
@@ -68,6 +69,17 @@ python license_generator.py generate --private-key vendor_keys/private_key.pem -
 
 3. Paste the generated license key into the activation screen.
 4. Complete the setup wizard to create the first admin account and restaurant branding.
+
+## Runtime Files
+
+When running from source, runtime files are saved under `.runtime/`:
+
+- Database: `.runtime/data/pos.db`
+- License file: `.runtime/license/license.dat`
+- Receipt preview: `.runtime/last_receipt.txt`
+- Archived receipts: `.runtime/receipts/`
+- CSV exports: `.runtime/exports/`
+- Backups: `.runtime/backups/`
 
 ## Build Executable
 

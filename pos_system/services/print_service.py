@@ -1,6 +1,9 @@
 ﻿from __future__ import annotations
 
-from pos_system.config.app_config import RECEIPT_PREVIEW_FILE
+from datetime import UTC, datetime
+from pathlib import Path
+
+from pos_system.config.app_config import RECEIPTS_DIR, RECEIPT_PREVIEW_FILE
 from pos_system.utils.formatting import money_text
 
 try:
@@ -12,18 +15,21 @@ except ImportError:  # pragma: no cover
 class PrintService:
     def print_receipt(self, order: dict, settings: dict) -> str:
         content = self.render_receipt(order, settings)
+        archived_path = self.save_receipt_copy(order, content)
         if win32print is None:
-            RECEIPT_PREVIEW_FILE.write_text(content, encoding="utf-8")
-            return f"Printer driver unavailable. Receipt preview saved to {RECEIPT_PREVIEW_FILE}."
-        printer_name = win32print.GetDefaultPrinter()
-        handle = win32print.OpenPrinter(printer_name)
+            return f"Printer driver unavailable. Receipt preview saved to {RECEIPT_PREVIEW_FILE}. Archived copy saved to {archived_path}."
+        try:
+            printer_name = win32print.GetDefaultPrinter()
+            handle = win32print.OpenPrinter(printer_name)
+        except Exception:
+            return f"Default printer unavailable. Receipt preview saved to {RECEIPT_PREVIEW_FILE}. Archived copy saved to {archived_path}."
         try:
             win32print.StartDocPrinter(handle, 1, ("Restaurant Receipt", None, "RAW"))
             win32print.StartPagePrinter(handle)
             win32print.WritePrinter(handle, content.encode("utf-8"))
             win32print.EndPagePrinter(handle)
             win32print.EndDocPrinter(handle)
-            return f"Receipt sent to {printer_name}."
+            return f"Receipt sent to {printer_name}. Archived copy saved to {archived_path}."
         finally:
             win32print.ClosePrinter(handle)
 
@@ -67,3 +73,10 @@ class PrintService:
         receipt_text = "\n".join(lines) + "\n"
         RECEIPT_PREVIEW_FILE.write_text(receipt_text, encoding="utf-8")
         return receipt_text
+
+    def save_receipt_copy(self, order: dict, receipt_text: str) -> Path:
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        safe_order_number = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in order["order_number"])
+        filename = RECEIPTS_DIR / f"receipt_{safe_order_number}_{timestamp}.txt"
+        filename.write_text(receipt_text, encoding="utf-8")
+        return filename

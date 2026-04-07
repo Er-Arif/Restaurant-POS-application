@@ -18,6 +18,7 @@ from pos_system.services.license_service import LicenseService
 from pos_system.services.menu_service import MenuService
 from pos_system.services.order_service import OrderService
 from pos_system.services.payment_service import PaymentService
+from pos_system.services.print_service import PrintService
 from pos_system.services.report_service import ReportService
 from pos_system.services.settings_service import SettingsService
 from pos_system.services.table_service import TableService
@@ -38,6 +39,10 @@ class ServiceTests(unittest.TestCase):
         with session_scope() as session:
             for model in (Payment, OrderItem, Order, MenuItem, Category, Table, LicenseRecord, RestaurantSettings, User):
                 session.query(model).delete()
+        for path in app_config.RECEIPTS_DIR.glob("receipt_*.txt"):
+            path.unlink()
+        if app_config.RECEIPT_PREVIEW_FILE.exists():
+            app_config.RECEIPT_PREVIEW_FILE.unlink()
 
     def test_password_hashing_login(self):
         auth = AuthService()
@@ -131,6 +136,39 @@ class ServiceTests(unittest.TestCase):
             {"start_date": date.today() - timedelta(days=1), "end_date": date.today() + timedelta(days=1)}
         )
         self.assertTrue(Path(filename).exists())
+
+    def test_receipt_archive_save(self):
+        print_service = PrintService()
+        order = {
+            "order_number": "T1-20260408101010",
+            "table_name": "T1",
+            "created_by_username": "admin",
+            "subtotal": 330,
+            "discount_amount": 0,
+            "service_charge_amount": 0,
+            "gst_amount": 0,
+            "grand_total": 330,
+            "items": [
+                {"name": "Butter Chicken", "quantity": 1, "line_total": 250},
+                {"name": "Naan", "quantity": 2, "line_total": 80},
+            ],
+            "payments": [
+                {"method": "cash", "amount_received": 500, "change_returned": 170},
+            ],
+        }
+        settings = {
+            "restaurant_name": "Test Cafe",
+            "address": "Main Road",
+            "phone": "1234567890",
+            "gst_number": "GST123",
+            "currency_symbol": "₹",
+            "receipt_footer": "Thank you!",
+        }
+        message = print_service.print_receipt(order, settings)
+        archived_receipts = list(app_config.RECEIPTS_DIR.glob("receipt_T1-20260408101010_*.txt"))
+        self.assertTrue(app_config.RECEIPT_PREVIEW_FILE.exists())
+        self.assertEqual(len(archived_receipts), 1)
+        self.assertIn("Archived copy saved to", message)
 
 
 if __name__ == "__main__":

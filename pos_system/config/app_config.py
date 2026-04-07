@@ -35,6 +35,7 @@ DB_DIR = DATA_DIR / "data"
 DB_PATH = DB_DIR / "pos.db"
 BACKUP_DIR = DATA_DIR / "backups"
 EXPORT_DIR = DATA_DIR / "exports"
+RECEIPTS_DIR = DATA_DIR / "receipts"
 LOGO_DIR = DATA_DIR / "branding"
 LICENSE_DIR = DATA_DIR / "license"
 LICENSE_FILE = LICENSE_DIR / "license.dat"
@@ -43,7 +44,7 @@ BUNDLED_PUBLIC_KEY = resource_root() / "pos_system" / "license" / "public_key.pe
 
 
 def ensure_runtime_dirs() -> None:
-    for path in (DATA_DIR, DB_DIR, BACKUP_DIR, EXPORT_DIR, LOGO_DIR, LICENSE_DIR):
+    for path in (DATA_DIR, DB_DIR, BACKUP_DIR, EXPORT_DIR, RECEIPTS_DIR, LOGO_DIR, LICENSE_DIR):
         path.mkdir(parents=True, exist_ok=True)
 
 
