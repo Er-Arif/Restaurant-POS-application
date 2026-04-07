@@ -8,6 +8,7 @@ from pathlib import Path
 APP_VENDOR = "CodexRetail"
 APP_NAME = "WhiteLabelPOS"
 APP_DISPLAY_NAME = "White-Label Restaurant POS"
+DEV_BYPASS_ENV = "POS_DEV_BYPASS_LICENSE"
 
 
 def project_root() -> Path:
@@ -50,3 +51,8 @@ def ensure_runtime_dirs() -> None:
 
 def bundled_asset(*parts: str) -> Path:
     return resource_root().joinpath(*parts)
+
+
+def developer_license_bypass_enabled() -> bool:
+    value = os.environ.get(DEV_BYPASS_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}

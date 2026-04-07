@@ -1,4 +1,4 @@
-﻿# White-Label Offline Desktop Restaurant POS
+# White-Label Offline Desktop Restaurant POS
 
 Windows-first offline restaurant POS built with Python, PySide6, SQLite, SQLAlchemy, bcrypt, cryptography, `win32print`, and PyInstaller.
 
@@ -9,26 +9,27 @@ Windows-first offline restaurant POS built with Python, PySide6, SQLite, SQLAlch
 - Touch-friendly dine-in POS with one active ticket per table
 - White-label restaurant branding and receipt footer configuration
 - SQLite storage, CSV export, manual backup/restore, and receipt printing
-- Per-order archived receipt text files in the runtime receipts folder
+- Per-order archived receipt text and PDF files in the runtime receipts folder
+- Staff POS can open the Windows print dialog to choose a receipt printer or Microsoft Print to PDF
 
 ## Project Structure
 
 ```text
 .
-├── main.py
-├── init_db.py
-├── license_generator.py
-├── requirements.txt
-├── tests/
-└── pos_system/
-    ├── config/
-    ├── controllers/
-    ├── database/
-    ├── license/
-    ├── models/
-    ├── services/
-    ├── ui/
-    └── utils/
++-- main.py
++-- init_db.py
++-- license_generator.py
++-- requirements.txt
++-- tests/
++-- pos_system/
+    +-- config/
+    +-- controllers/
+    +-- database/
+    +-- license/
+    +-- models/
+    +-- services/
+    +-- ui/
+    +-- utils/
 ```
 
 ## Setup
@@ -58,6 +59,23 @@ python init_db.py
 python main.py
 ```
 
+## Developer Bypass
+
+During local development, you can temporarily bypass the license gate and open the app directly:
+
+```bash
+python main.py --dev
+```
+
+You can also use the environment variable form:
+
+```bash
+set POS_DEV_BYPASS_LICENSE=1
+python main.py
+```
+
+In developer bypass mode, the app skips license validation but still uses the normal setup/login flow.
+
 ## Offline License Workflow
 
 1. Launch the app and copy the hardware fingerprint shown on the activation screen.
@@ -77,7 +95,7 @@ When running from source, runtime files are saved under `.runtime/`:
 - Database: `.runtime/data/pos.db`
 - License file: `.runtime/license/license.dat`
 - Receipt preview: `.runtime/last_receipt.txt`
-- Archived receipts: `.runtime/receipts/`
+- Archived receipts: `.runtime/receipts/` containing `.txt` and `.pdf` copies
 - CSV exports: `.runtime/exports/`
 - Backups: `.runtime/backups/`
 
@@ -98,6 +116,8 @@ python -m unittest discover -s tests
 ## Commercial Hardening Notes
 
 - Keep `vendor_keys/private_key.pem` outside the deployed app.
+- Remove developer bypass usage before shipping customer builds.
 - Rotate the public key before packaging a real customer build.
 - Test printing with the target Windows receipt printer and installed driver.
 - Back up `%ProgramData%\CodexRetail\WhiteLabelPOS\` regularly.
+\n## Receipt Printing\n\n- After payment, the app automatically saves a PDF receipt in .runtime/receipts/.\n- Use Print Receipt in the staff POS to open the Windows printer chooser.\n- Select your thermal printer for paper output, or Microsoft Print to PDF for a manual PDF save location.\n- Use Save Receipt PDF in the staff POS to generate another PDF copy without opening the printer dialog.\n

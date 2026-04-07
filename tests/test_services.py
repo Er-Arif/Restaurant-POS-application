@@ -1,9 +1,13 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import os
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -27,6 +31,7 @@ from pos_system.services.table_service import TableService
 class ServiceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
         initialize_database()
 
     @classmethod
@@ -40,6 +45,8 @@ class ServiceTests(unittest.TestCase):
             for model in (Payment, OrderItem, Order, MenuItem, Category, Table, LicenseRecord, RestaurantSettings, User):
                 session.query(model).delete()
         for path in app_config.RECEIPTS_DIR.glob("receipt_*.txt"):
+            path.unlink()
+        for path in app_config.RECEIPTS_DIR.glob("receipt_*.pdf"):
             path.unlink()
         if app_config.RECEIPT_PREVIEW_FILE.exists():
             app_config.RECEIPT_PREVIEW_FILE.unlink()
@@ -161,7 +168,7 @@ class ServiceTests(unittest.TestCase):
             "address": "Main Road",
             "phone": "1234567890",
             "gst_number": "GST123",
-            "currency_symbol": "₹",
+            "currency_symbol": "?",
             "receipt_footer": "Thank you!",
         }
         message = print_service.print_receipt(order, settings)
@@ -169,6 +176,39 @@ class ServiceTests(unittest.TestCase):
         self.assertTrue(app_config.RECEIPT_PREVIEW_FILE.exists())
         self.assertEqual(len(archived_receipts), 1)
         self.assertIn("Archived copy saved to", message)
+
+    def test_receipt_pdf_save(self):
+        print_service = PrintService()
+        order = {
+            "order_number": "T2-20260408121212",
+            "table_name": "T2",
+            "created_by_username": "staff",
+            "subtotal": 200,
+            "discount_amount": 10,
+            "service_charge_amount": 20,
+            "gst_amount": 10.5,
+            "grand_total": 220.5,
+            "items": [
+                {"name": "Fried Rice", "quantity": 1, "line_total": 200},
+            ],
+            "payments": [
+                {"method": "upi", "amount_received": 220.5, "change_returned": 0},
+            ],
+        }
+        settings = {
+            "restaurant_name": "PDF Cafe",
+            "address": "Main Road",
+            "phone": "1234567890",
+            "gst_number": "GST123",
+            "currency_symbol": "?",
+            "receipt_footer": "Thank you!",
+        }
+        pdf_path = print_service.save_receipt_pdf(order, settings)
+        archived_receipts = list(app_config.RECEIPTS_DIR.glob("receipt_T2-20260408121212_*.txt"))
+        self.assertTrue(app_config.RECEIPT_PREVIEW_FILE.exists())
+        self.assertEqual(len(archived_receipts), 1)
+        self.assertTrue(pdf_path.exists())
+        self.assertGreater(pdf_path.stat().st_size, 0)
 
 
 if __name__ == "__main__":

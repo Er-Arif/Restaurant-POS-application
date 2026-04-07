@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pos_system.config.app_config import BACKUP_DIR, DB_PATH
@@ -10,7 +10,7 @@ from pos_system.database.session import SessionLocal, engine
 
 class BackupService:
     def create_backup(self) -> str:
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         target = BACKUP_DIR / f"pos_backup_{timestamp}.db"
         SessionLocal.remove()
         engine.dispose()

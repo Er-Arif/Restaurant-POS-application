@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidgetItem, QMessageBox, QTableWidgetItem
@@ -16,6 +16,7 @@ class PosController:
         self.print_service = print_service
         self.selected_table_id = None
         self.current_order = None
+        self.last_completed_order = None
         self._bind()
 
     def _bind(self) -> None:
@@ -26,6 +27,7 @@ class PosController:
         self.window.apply_adjustments_button.clicked.connect(self.apply_adjustments)
         self.window.pay_button.clicked.connect(self.take_payment)
         self.window.print_button.clicked.connect(self.reprint_receipt)
+        self.window.save_pdf_button.clicked.connect(self.export_receipt_pdf)
 
     def load(self) -> None:
         self.window.user_label.setText(f"Signed in as {self.session_user.username} ({self.session_user.role.value})")
@@ -114,9 +116,15 @@ class PosController:
                 self.window.payment_method.currentText(),
                 self.window.amount_received.value(),
             )
-            self.current_order = self.order_service.get_order(self.current_order["id"])
-            message = self.print_service.print_receipt(self.current_order, self.settings_service.get_settings())
-            QMessageBox.information(self.window, "Payment Complete", message)
+            completed_order = self.order_service.get_order(self.current_order["id"])
+            settings = self.settings_service.get_settings()
+            pdf_path = self.print_service.save_receipt_pdf(completed_order, settings)
+            self.last_completed_order = completed_order
+            QMessageBox.information(
+                self.window,
+                "Payment Complete",
+                f"Payment saved. Receipt PDF saved to {pdf_path}. Use Print Receipt to choose a printer or Microsoft Print to PDF.",
+            )
             self.current_order = None
             self.selected_table_id = None
             self._clear_ticket()
@@ -125,14 +133,29 @@ class PosController:
             QMessageBox.warning(self.window, "Payment Error", str(exc))
 
     def reprint_receipt(self) -> None:
-        if not self.current_order:
-            QMessageBox.warning(self.window, "No Order", "Load an order first.")
+        order = self._receipt_order()
+        if not order:
+            QMessageBox.warning(self.window, "No Receipt", "Complete a sale or load an order first.")
             return
         try:
-            message = self.print_service.print_receipt(self.current_order, self.settings_service.get_settings())
-            QMessageBox.information(self.window, "Receipt Printed", message)
+            message = self.print_service.print_receipt_dialog(order, self.settings_service.get_settings(), self.window)
+            QMessageBox.information(self.window, "Receipt", message)
         except Exception as exc:
             QMessageBox.warning(self.window, "Print Error", str(exc))
+
+    def export_receipt_pdf(self) -> None:
+        order = self._receipt_order()
+        if not order:
+            QMessageBox.warning(self.window, "No Receipt", "Complete a sale or load an order first.")
+            return
+        try:
+            pdf_path = self.print_service.save_receipt_pdf(order, self.settings_service.get_settings())
+            QMessageBox.information(self.window, "Receipt PDF Saved", f"Receipt PDF saved to {pdf_path}")
+        except Exception as exc:
+            QMessageBox.warning(self.window, "PDF Error", str(exc))
+
+    def _receipt_order(self):
+        return self.current_order or self.last_completed_order
 
     def _render_order(self) -> None:
         if not self.current_order:

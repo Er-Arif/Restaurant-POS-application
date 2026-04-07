@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from sqlalchemy import select
 
-from pos_system.config.app_config import BUNDLED_PUBLIC_KEY, LICENSE_FILE
+from pos_system.config.app_config import BUNDLED_PUBLIC_KEY, LICENSE_FILE, developer_license_bypass_enabled
 from pos_system.database.session import session_scope
 from pos_system.models.dtos import ActivationResult, StartupState
 from pos_system.models.entities import LicenseRecord, User
@@ -26,6 +26,12 @@ class LicenseService:
         return hardware_fingerprint()
 
     def validate_startup(self) -> StartupState:
+        if developer_license_bypass_enabled():
+            with session_scope() as session:
+                has_user = session.scalar(select(User.id).limit(1)) is not None
+            if not has_user:
+                return StartupState(status=StartupStatus.NEEDS_SETUP, message="Developer bypass enabled. Finish setup.")
+            return StartupState(status=StartupStatus.READY, message="Developer bypass enabled.")
         validation = self.validate_installed_license()
         if not validation.success:
             return StartupState(status=StartupStatus.NEEDS_ACTIVATION, message=validation.message)

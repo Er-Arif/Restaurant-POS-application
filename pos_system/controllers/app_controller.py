@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from PySide6.QtWidgets import QApplication
 
+from pos_system.config.app_config import developer_license_bypass_enabled
 from pos_system.controllers.admin_controller import AdminController
 from pos_system.controllers.pos_controller import PosController
 from pos_system.database.bootstrap import initialize_database
@@ -20,6 +21,9 @@ from pos_system.ui.screens import ActivationScreen, AdminDashboardWindow, LoginS
 
 
 class AppController:
+    DEV_ADMIN_USERNAME = "arif"
+    DEV_ADMIN_PASSWORD = "arif123"
+
     def __init__(self, app: QApplication):
         self.app = app
         initialize_database()
@@ -41,6 +45,8 @@ class AppController:
         self.pos_window = None
 
     def start(self) -> None:
+        if developer_license_bypass_enabled():
+            self.prepare_developer_bypass()
         state = self.license_service.validate_startup()
         if state.status == StartupStatus.NEEDS_ACTIVATION:
             self.show_activation()
@@ -107,6 +113,10 @@ class AppController:
     def show_login(self) -> None:
         self.close_current_windows()
         screen = LoginScreen()
+        if developer_license_bypass_enabled():
+            screen.username.setText(self.DEV_ADMIN_USERNAME)
+            screen.password.setText(self.DEV_ADMIN_PASSWORD)
+            screen.feedback_label.setText("Developer bypass enabled. Use the prefilled admin login.")
         screen.login_button.clicked.connect(lambda: self.login(screen))
         self.login_screen = screen
         screen.show()
@@ -172,3 +182,38 @@ class AppController:
             return
         for name in ("Starters", "Main Course", "Beverages", "Desserts"):
             self.menu_service.save_category(name=name, description=f"Default {name.lower()} category")
+
+    def prepare_developer_bypass(self) -> None:
+        self.settings_service.save_settings(
+            {
+                "restaurant_name": "Developer POS",
+                "address": "Local Development Mode",
+                "phone": "",
+                "gst_number": "",
+                "currency_symbol": "?",
+                "receipt_footer": "Developer testing build",
+                "gst_percent": 0,
+                "default_discount_amount": 0,
+                "default_service_charge_amount": 0,
+                "setup_complete": True,
+            }
+        )
+        existing_user = next((user for user in self.auth_service.list_users() if user["username"] == self.DEV_ADMIN_USERNAME), None)
+        if existing_user:
+            self.auth_service.update_user(
+                user_id=existing_user["id"],
+                username=self.DEV_ADMIN_USERNAME,
+                role=UserRole.ADMIN,
+                is_active=True,
+                password=self.DEV_ADMIN_PASSWORD,
+            )
+        else:
+            self.auth_service.create_user(
+                username=self.DEV_ADMIN_USERNAME,
+                password=self.DEV_ADMIN_PASSWORD,
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+        if not self.table_service.list_tables():
+            self.table_service.initialize_tables(10, "T")
+        self.seed_default_categories()

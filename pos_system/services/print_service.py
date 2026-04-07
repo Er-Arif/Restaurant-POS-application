@@ -1,7 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime
+from html import escape
 from pathlib import Path
+
+from PySide6.QtGui import QTextDocument
+from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+from PySide6.QtWidgets import QDialog
 
 from pos_system.config.app_config import RECEIPTS_DIR, RECEIPT_PREVIEW_FILE
 from pos_system.utils.formatting import money_text
@@ -33,8 +38,34 @@ class PrintService:
         finally:
             win32print.ClosePrinter(handle)
 
+    def print_receipt_dialog(self, order: dict, settings: dict, parent=None) -> str:
+        content = self.render_receipt(order, settings)
+        archived_path = self.save_receipt_copy(order, content)
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setDocName(f"Receipt {order['order_number']}")
+        dialog = QPrintDialog(printer, parent)
+        if dialog.exec() != QDialog.Accepted:
+            return f"Print cancelled. Receipt preview saved to {RECEIPT_PREVIEW_FILE}. Archived copy saved to {archived_path}."
+        try:
+            self._send_to_printer(self._build_document(content), printer)
+        except Exception as exc:
+            return f"Unable to print receipt: {exc}. Receipt preview saved to {RECEIPT_PREVIEW_FILE}. Archived copy saved to {archived_path}."
+        printer_name = printer.printerName() or "selected printer"
+        return f"Receipt sent to {printer_name}. Archived copy saved to {archived_path}."
+
+    def save_receipt_pdf(self, order: dict, settings: dict) -> Path:
+        content = self.render_receipt(order, settings)
+        self.save_receipt_copy(order, content)
+        pdf_path = self._receipt_file_path(order, ".pdf")
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(str(pdf_path))
+        printer.setDocName(f"Receipt {order['order_number']}")
+        self._send_to_printer(self._build_document(content), printer)
+        return pdf_path
+
     def render_receipt(self, order: dict, settings: dict) -> str:
-        currency = settings.get("currency_symbol", "₹")
+        currency = settings.get("currency_symbol", "?")
         lines = [
             settings.get("restaurant_name", "Restaurant POS"),
             settings.get("address", ""),
@@ -75,8 +106,24 @@ class PrintService:
         return receipt_text
 
     def save_receipt_copy(self, order: dict, receipt_text: str) -> Path:
-        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-        safe_order_number = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in order["order_number"])
-        filename = RECEIPTS_DIR / f"receipt_{safe_order_number}_{timestamp}.txt"
+        filename = self._receipt_file_path(order, ".txt")
         filename.write_text(receipt_text, encoding="utf-8")
         return filename
+
+    def _receipt_file_path(self, order: dict, suffix: str) -> Path:
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        safe_order_number = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in order["order_number"])
+        return RECEIPTS_DIR / f"receipt_{safe_order_number}_{timestamp}{suffix}"
+
+    def _build_document(self, content: str) -> QTextDocument:
+        document = QTextDocument()
+        document.setHtml(f"<pre style='font-family: Consolas, Courier New, monospace; font-size: 10pt;'>{escape(content)}</pre>")
+        return document
+
+    def _send_to_printer(self, document: QTextDocument, printer: QPrinter) -> None:
+        print_method = getattr(document, "print", None) or getattr(document, "print_", None)
+        if print_method is None:
+            raise RuntimeError("QTextDocument printing is unavailable in this Qt build.")
+        print_method(printer)
+
+

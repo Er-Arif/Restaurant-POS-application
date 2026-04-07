@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date
 
@@ -85,7 +85,7 @@ class SetupWizardScreen(QWidget):
         self.address = QTextEdit()
         self.phone = QLineEdit()
         self.gst_number = QLineEdit()
-        self.currency_symbol = QLineEdit("₹")
+        self.currency_symbol = QLineEdit("?")
         self.receipt_footer = QTextEdit()
         self.logo_path = QLineEdit()
         self.logo_browse = QPushButton("Browse Logo")
@@ -318,7 +318,7 @@ class AdminDashboardWindow(QMainWindow):
         self.settings_address = QTextEdit()
         self.settings_phone = QLineEdit()
         self.settings_gst_number = QLineEdit()
-        self.settings_currency = QLineEdit("₹")
+        self.settings_currency = QLineEdit("?")
         self.settings_gst_percent = QDoubleSpinBox()
         self.settings_gst_percent.setMaximum(100)
         self.settings_gst_percent.setDecimals(2)
@@ -427,7 +427,8 @@ class PosWindow(QMainWindow):
         self.remove_item_button = QPushButton("Remove Selected Item")
         self.apply_adjustments_button = QPushButton("Apply Charges")
         self.pay_button = QPushButton("Take Payment")
-        self.print_button = QPushButton("Reprint Receipt")
+        self.print_button = QPushButton("Print Receipt")
+        self.save_pdf_button = QPushButton("Save Receipt PDF")
         self.logout_button = QPushButton("Logout")
         right_layout.addWidget(self.user_label)
         right_layout.addWidget(self.order_meta)
@@ -439,6 +440,7 @@ class PosWindow(QMainWindow):
         right_layout.addWidget(self.apply_adjustments_button)
         right_layout.addWidget(self.pay_button)
         right_layout.addWidget(self.print_button)
+        right_layout.addWidget(self.save_pdf_button)
         right_layout.addWidget(self.logout_button)
         right_layout.addStretch(1)
 
@@ -450,3 +452,4 @@ class PosWindow(QMainWindow):
     @staticmethod
     def show_message(parent, title: str, text: str) -> None:
         QMessageBox.information(parent, title, text)
+

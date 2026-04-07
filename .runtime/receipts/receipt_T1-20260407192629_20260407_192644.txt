@@ -1,0 +1,19 @@
+Developer POS
+Local Development Mode
+Phone: 
+GST: 
+------------------------------------
+Order: T1-20260407192629
+Table: T1
+Cashier: arif
+------------------------------------
+Tea x1 ?50.00
+noodles x1 ?100.00
+------------------------------------
+Subtotal: ?150.00
+Discount: ?0.00
+Service: ?0.00
+GST: ?0.00
+Total: ?150.00
+------------------------------------
+Developer testing build
