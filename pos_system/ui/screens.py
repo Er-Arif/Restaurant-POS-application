@@ -18,11 +18,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTabWidget,
@@ -248,23 +250,8 @@ class AdminDashboardWindow(QMainWindow):
         metrics_layout.addWidget(cancelled_card, 1, 2)
         overview_layout.addLayout(metrics_layout)
 
-        actions_box = QGroupBox("Quick Actions")
-        actions_layout = QGridLayout(actions_box)
         self.overview_refresh_button = QPushButton("Refresh Dashboard")
-        self.overview_menu_button = QPushButton("Manage Menu")
-        self.overview_users_button = QPushButton("Manage Users")
-        self.overview_orders_button = QPushButton("Review Orders")
-        self.overview_reports_button = QPushButton("Open Reports")
-        self.overview_backup_button = QPushButton("Create Backup")
-        actions_layout.addWidget(self.overview_refresh_button, 0, 0)
-        actions_layout.addWidget(self.overview_menu_button, 0, 1)
-        actions_layout.addWidget(self.overview_users_button, 0, 2)
-        actions_layout.addWidget(self.overview_orders_button, 1, 0)
-        actions_layout.addWidget(self.overview_reports_button, 1, 1)
-        actions_layout.addWidget(self.overview_backup_button, 1, 2)
-        overview_layout.addWidget(actions_box)
-
-        lower_layout = QHBoxLayout()
+        overview_layout.addWidget(self.overview_refresh_button, alignment=Qt.AlignLeft)
 
         recent_orders_box = QGroupBox("Recent Orders")
         recent_orders_layout = QVBoxLayout(recent_orders_box)
@@ -272,33 +259,7 @@ class AdminDashboardWindow(QMainWindow):
         self.overview_recent_orders.setHorizontalHeaderLabels(["Order #", "Table", "Status", "Total", "Created"])
         self.overview_recent_orders.horizontalHeader().setStretchLastSection(True)
         recent_orders_layout.addWidget(self.overview_recent_orders)
-        lower_layout.addWidget(recent_orders_box, 2)
-
-        side_layout = QVBoxLayout()
-        operations_box = QGroupBox("Operations")
-        operations_layout = QVBoxLayout(operations_box)
-        self.overview_operations_summary = QLabel("")
-        self.overview_operations_summary.setWordWrap(True)
-        operations_layout.addWidget(self.overview_operations_summary)
-        side_layout.addWidget(operations_box)
-
-        alerts_box = QGroupBox("Attention Needed")
-        alerts_layout = QVBoxLayout(alerts_box)
-        self.overview_alerts_summary = QLabel("")
-        self.overview_alerts_summary.setWordWrap(True)
-        alerts_layout.addWidget(self.overview_alerts_summary)
-        side_layout.addWidget(alerts_box)
-
-        top_items_box = QGroupBox("Top Items")
-        top_items_layout = QVBoxLayout(top_items_box)
-        self.overview_top_items_summary = QLabel("")
-        self.overview_top_items_summary.setWordWrap(True)
-        top_items_layout.addWidget(self.overview_top_items_summary)
-        side_layout.addWidget(top_items_box)
-        side_layout.addStretch(1)
-
-        lower_layout.addLayout(side_layout, 1)
-        overview_layout.addLayout(lower_layout)
+        overview_layout.addWidget(recent_orders_box)
         self.tabs.addTab(self.overview_tab, "Overview")
 
         self.menu_tab = QWidget()
@@ -565,84 +526,128 @@ class PosWindow(QMainWindow):
         left_box = QGroupBox("Tables")
         left_layout = QVBoxLayout(left_box)
         self.table_list = QListWidget()
+        self.table_list.setSpacing(6)
+        self.table_list.setSelectionMode(QAbstractItemView.SingleSelection)
         left_layout.addWidget(self.table_list)
 
         middle_box = QGroupBox("Menu")
         middle_layout = QVBoxLayout(middle_box)
-        self.category_filter = QComboBox()
+        middle_layout.setSpacing(10)
+        middle_header = QLabel("Select a category, then tap + Add Item")
+        middle_header.setStyleSheet("font-size: 11pt; color: #52606d; font-weight: 600;")
+        self.category_bar = QListWidget()
+        self.category_bar.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.category_bar.setMaximumHeight(140)
+        self.category_bar.setSpacing(4)
         self.item_list = QListWidget()
-        middle_layout.addWidget(self.category_filter)
+        self.item_list.setSpacing(10)
+        middle_layout.addWidget(middle_header)
+        middle_layout.addWidget(self.category_bar)
         middle_layout.addWidget(self.item_list)
 
         right_box = QGroupBox("Active Ticket")
         right_layout = QVBoxLayout(right_box)
+        right_layout.setContentsMargins(12, 12, 12, 12)
+        right_layout.setSpacing(12)
         self.user_label = QLabel("")
         self.order_meta = QLabel("Select a table to begin.")
-        self.order_items_table = QTableWidget(0, 4)
-        self.order_items_table.setHorizontalHeaderLabels(["ID", "Item", "Qty", "Line Total"])
-        self.order_items_table.horizontalHeader().setStretchLastSection(True)
-        adjustment_form = QFormLayout()
+
+        ticket_box = QGroupBox("Order & Charges")
+        ticket_layout = QVBoxLayout(ticket_box)
+        ticket_layout.setContentsMargins(14, 14, 14, 14)
+        ticket_layout.setSpacing(12)
+
+        self.order_items_table = QTableWidget(0, 5)
+        self.order_items_table.setHorizontalHeaderLabels(["Item", "Qty", "Unit Price", "Line Total", "Actions"])
+        self.order_items_table.horizontalHeader().setStretchLastSection(False)
+        self.order_items_table.setMinimumHeight(300)
+        self.order_items_table.verticalHeader().setDefaultSectionSize(54)
+        self.order_items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.order_items_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.order_items_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.order_items_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        footer_box = QGroupBox("Billing Footer")
+        footer_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        footer_layout = QVBoxLayout(footer_box)
+        footer_layout.setContentsMargins(10, 10, 10, 10)
+        footer_layout.setSpacing(10)
+
+        controls_layout = QGridLayout()
+        controls_layout.setHorizontalSpacing(18)
+        controls_layout.setVerticalSpacing(10)
         self.discount_spin = MoneySpinBox()
-        self.discount_spin.setMaximum(100000)
+        self.discount_spin.setMaximum(100)
         self.discount_spin.setDecimals(2)
+        self.discount_spin.setMinimumWidth(220)
+        self.discount_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.service_charge_spin = MoneySpinBox()
-        self.service_charge_spin.setMaximum(100000)
+        self.service_charge_spin.setMaximum(100)
         self.service_charge_spin.setDecimals(2)
-        adjustment_form.addRow("Discount", self.discount_spin)
-        adjustment_form.addRow("Service Charge", self.service_charge_spin)
-        payment_row = QHBoxLayout()
+        self.service_charge_spin.setMinimumWidth(220)
+        self.service_charge_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.payment_method = QComboBox()
         self.payment_method.addItems([method.value for method in PaymentMethod])
+        self.payment_method.setMinimumWidth(220)
+        self.payment_method.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.amount_received_label = QLabel("Received")
         self.amount_received = MoneySpinBox()
         self.amount_received.setMaximum(1000000)
         self.amount_received.setDecimals(2)
-        payment_row.addWidget(QLabel("Method"))
-        payment_row.addWidget(self.payment_method)
-        payment_row.addWidget(QLabel("Received"))
-        payment_row.addWidget(self.amount_received)
+        self.amount_received.setMinimumWidth(220)
+        self.amount_received.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        controls_layout.addWidget(QLabel("Discount %"), 0, 0)
+        controls_layout.addWidget(self.discount_spin, 0, 1)
+        controls_layout.addWidget(QLabel("Service Charge %"), 0, 2)
+        controls_layout.addWidget(self.service_charge_spin, 0, 3)
+        controls_layout.addWidget(QLabel("Payment Method"), 1, 0)
+        controls_layout.addWidget(self.payment_method, 1, 1)
+        controls_layout.addWidget(self.amount_received_label, 1, 2)
+        controls_layout.addWidget(self.amount_received, 1, 3)
+        controls_layout.setColumnStretch(1, 1)
+        controls_layout.setColumnStretch(3, 1)
+
+        totals_row = QHBoxLayout()
         self.totals_label = QLabel("")
-        self.remove_item_button = QPushButton("Remove Selected Item")
-        self.apply_adjustments_button = QPushButton("Apply Charges")
+        self.totals_label.setWordWrap(True)
+        self.totals_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.done_button = QPushButton("Done")
+        totals_row.addWidget(self.totals_label, 1)
+        totals_row.addWidget(self.done_button, 0, Qt.AlignBottom)
+
+        footer_layout.addLayout(controls_layout)
+        footer_layout.addLayout(totals_row)
+
+        ticket_layout.addWidget(self.order_items_table, 1)
+        ticket_layout.addWidget(footer_box, 0)
+
+        actions_box = QGroupBox("Actions")
+        actions_layout = QVBoxLayout(actions_box)
         self.pay_button = QPushButton("Take Payment")
         self.print_button = QPushButton("Print Receipt")
-        self.save_pdf_button = QPushButton("Save Receipt PDF")
         self.logout_button = QPushButton("Logout")
+        for button in (self.done_button, self.pay_button, self.print_button, self.logout_button):
+            button.setMinimumHeight(48)
+        actions_layout.addWidget(self.pay_button)
+        actions_layout.addWidget(self.print_button)
+        actions_layout.addWidget(self.logout_button)
+        actions_layout.addStretch(1)
+
         right_layout.addWidget(self.user_label)
         right_layout.addWidget(self.order_meta)
-        right_layout.addWidget(self.order_items_table)
-        right_layout.addLayout(adjustment_form)
-        right_layout.addLayout(payment_row)
-        right_layout.addWidget(self.totals_label)
-        right_layout.addWidget(self.remove_item_button)
-        right_layout.addWidget(self.apply_adjustments_button)
-        right_layout.addWidget(self.pay_button)
-        right_layout.addWidget(self.print_button)
-        right_layout.addWidget(self.save_pdf_button)
-        right_layout.addWidget(self.logout_button)
-        right_layout.addStretch(1)
+        right_layout.addWidget(ticket_box, 1)
+        right_layout.addWidget(actions_box, 0)
+
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setWidget(right_box)
 
         root.addWidget(left_box, 1)
         root.addWidget(middle_box, 1)
-        root.addWidget(right_box, 2)
-        self.resize(1280, 800)
+        root.addWidget(right_scroll, 3)
+        self.resize(1440, 860)
 
     @staticmethod
     def show_message(parent, title: str, text: str) -> None:
         QMessageBox.information(parent, title, text)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

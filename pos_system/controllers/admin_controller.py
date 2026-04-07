@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from collections import Counter
-from datetime import date
-from pathlib import Path
+from datetime import UTC, date, datetime
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox, QTableWidgetItem
-
-from pos_system.config.app_config import developer_license_bypass_enabled
 from pos_system.models.enums import UserRole
 from pos_system.services.print_service import PrintService
 from pos_system.utils.formatting import money_text
@@ -49,11 +45,6 @@ class AdminController:
 
     def _bind(self) -> None:
         self.window.overview_refresh_button.clicked.connect(self.refresh_overview)
-        self.window.overview_menu_button.clicked.connect(lambda: self.window.tabs.setCurrentWidget(self.window.menu_tab))
-        self.window.overview_users_button.clicked.connect(lambda: self.window.tabs.setCurrentWidget(self.window.users_tab))
-        self.window.overview_orders_button.clicked.connect(lambda: self.window.tabs.setCurrentWidget(self.window.orders_tab))
-        self.window.overview_reports_button.clicked.connect(lambda: self.window.tabs.setCurrentWidget(self.window.reports_tab))
-        self.window.overview_backup_button.clicked.connect(self.create_backup)
         self.window.save_category_button.clicked.connect(self.save_category)
         self.window.clear_category_button.clicked.connect(self.clear_category_form)
         self.window.toggle_category_button.clicked.connect(self.toggle_category_active)
@@ -97,47 +88,40 @@ class AdminController:
     def refresh_overview(self) -> None:
         settings = self.settings_service.get_settings()
         orders = self.order_service.list_orders()
-        users = self.auth_service.list_users()
-        categories = self.menu_service.list_categories()
-        menu_items = self.menu_service.list_menu_items()
-        tables = self.table_service.list_tables()
-        backups = self.backup_service.list_backups()
         currency = settings.get("currency_symbol") or "?"
-        today = date.today()
+        today = datetime.now().astimezone().date()
 
-        today_orders = [order for order in orders if order["created_at"].date() == today]
+        def order_local_date(order: dict) -> date:
+            created_at = order["created_at"]
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+            return created_at.astimezone().date()
+
+        today_orders = [order for order in orders if order_local_date(order) == today]
         paid_today = [order for order in today_orders if order["status"] == "paid"]
+        cancelled_today = [order for order in today_orders if order["status"] == "cancelled"]
         open_orders = [order for order in orders if order["status"] == "open"]
-        paid_orders = [order for order in orders if order["status"] == "paid"]
-        cancelled_orders = [order for order in orders if order["status"] == "cancelled"]
         revenue_today = sum(order["grand_total"] for order in paid_today)
         average_bill = revenue_today / len(paid_today) if paid_today else 0
         open_tables = len({order["table_id"] for order in open_orders})
-        active_staff = [user for user in users if user["role"] == UserRole.STAFF.value and user["is_active"]]
-        unavailable_items = [item for item in menu_items if not item["is_available"]]
-        inactive_categories = [category for category in categories if not category["is_active"]]
-        latest_backup = backups[0] if backups else ""
-        latest_backup_name = Path(latest_backup).name if latest_backup else "No backup yet"
 
         restaurant_name = settings.get("restaurant_name") or "Restaurant"
         self.window.brand_label.setText(f"{restaurant_name} Admin Dashboard")
         self.window.overview_headline.setText(f"{restaurant_name} overview for {today.isoformat()}")
-        self.window.overview_summary.setText(
-            "Track live sales, open tables, staffing, menu health, and backups from one place. Use the quick actions below to jump straight into the most common admin tasks."
-        )
+        self.window.overview_summary.setText("A simple live summary of today's business and the latest order activity.")
 
         self.window.overview_sales_today_value.setText(money_text(revenue_today, currency))
         self.window.overview_sales_today_meta.setText(f"{len(paid_today)} paid order(s) today")
         self.window.overview_orders_today_value.setText(str(len(today_orders)))
-        self.window.overview_orders_today_meta.setText("Includes open, paid, and cancelled orders")
+        self.window.overview_orders_today_meta.setText("Today's open, paid, and cancelled orders")
         self.window.overview_average_bill_value.setText(money_text(average_bill, currency))
         self.window.overview_average_bill_meta.setText("Average from today's paid bills")
         self.window.overview_open_tables_value.setText(str(open_tables))
         self.window.overview_open_tables_meta.setText("Tables with an active ticket right now")
-        self.window.overview_paid_orders_value.setText(str(len(paid_orders)))
-        self.window.overview_paid_orders_meta.setText("Lifetime paid orders in this local terminal")
-        self.window.overview_cancelled_orders_value.setText(str(len(cancelled_orders)))
-        self.window.overview_cancelled_orders_meta.setText("Cancelled tickets requiring manager awareness")
+        self.window.overview_paid_orders_value.setText(str(len(paid_today)))
+        self.window.overview_paid_orders_meta.setText("Paid orders completed today")
+        self.window.overview_cancelled_orders_value.setText(str(len(cancelled_today)))
+        self.window.overview_cancelled_orders_meta.setText("Orders cancelled today")
 
         recent_orders = orders[:5]
         self.window.overview_recent_orders.setRowCount(len(recent_orders))
@@ -147,47 +131,10 @@ class AdminController:
                 order["table_name"],
                 order["status"].title(),
                 money_text(order["grand_total"], currency),
-                order["created_at"].strftime("%H:%M %d-%m"),
+                order_local_date(order).isoformat(),
             ]
             for column, value in enumerate(values):
                 self.window.overview_recent_orders.setItem(row, column, QTableWidgetItem(str(value)))
-
-        operations_lines = [
-            f"Users: {len(users)} total | {len(active_staff)} active staff | {sum(1 for user in users if user['role'] == UserRole.ADMIN.value)} admin",
-            f"Menu: {len(categories)} categories | {len(menu_items)} items | {len(unavailable_items)} unavailable | {len(inactive_categories)} archived categories",
-            f"Tables: {len(tables)} configured | {open_tables} currently occupied",
-            f"Backup: {latest_backup_name}",
-            f"License mode: {'Developer bypass' if developer_license_bypass_enabled() else 'Offline activated license'}",
-        ]
-        self.window.overview_operations_summary.setText("\n".join(operations_lines))
-
-        alerts = []
-        if not backups:
-            alerts.append("No backup has been created yet. Create one before regular use.")
-        if unavailable_items:
-            alerts.append(f"{len(unavailable_items)} menu item(s) are marked unavailable.")
-        if inactive_categories:
-            alerts.append(f"{len(inactive_categories)} category or categories are archived.")
-        if not active_staff:
-            alerts.append("No active staff users are available for POS login.")
-        if not settings.get("gst_number"):
-            alerts.append("GST number is empty in settings.")
-        if open_tables:
-            alerts.append(f"{open_tables} table(s) currently have open tickets.")
-        if not alerts:
-            alerts.append("No urgent issues detected. Operations look healthy.")
-        self.window.overview_alerts_summary.setText("\n".join(alerts))
-
-        source_orders = paid_today or paid_orders
-        item_counter = Counter()
-        for order in source_orders:
-            for item in order["items"]:
-                item_counter[item["name"]] += item["quantity"]
-        if item_counter:
-            top_items = [f"{name}: {qty} sold" for name, qty in item_counter.most_common(5)]
-            self.window.overview_top_items_summary.setText("\n".join(top_items))
-        else:
-            self.window.overview_top_items_summary.setText("No paid sales yet. Top-selling items will appear here after the first completed orders.")
 
     def refresh_categories(self) -> None:
         categories = self.menu_service.list_categories()

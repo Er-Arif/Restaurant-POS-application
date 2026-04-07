@@ -283,7 +283,7 @@ class AppFlowTests(unittest.TestCase):
         controller.load()
         self.assertIn("Admin Cafe", window.overview_headline.text())
         self.assertEqual(window.overview_orders_today_value.text(), "0")
-        window.overview_users_button.click()
+        window.tabs.setCurrentWidget(window.users_tab)
         self.assertIs(window.tabs.currentWidget(), window.users_tab)
 
         window.category_name.setText("Starters")
@@ -312,7 +312,6 @@ class AppFlowTests(unittest.TestCase):
         window.settings_restaurant_name.setText("Admin Cafe Updated")
         controller.save_settings()
         self.assertEqual(SettingsService().get_settings()["restaurant_name"], "Admin Cafe Updated")
-        self.assertIn("Users:", window.overview_operations_summary.text())
         self.assertFalse(mock_warning.called)
 
     @patch.object(QMessageBox, "information")
@@ -387,12 +386,20 @@ class AppFlowTests(unittest.TestCase):
             print_service=PrintService(),
         )
         controller.load()
+        self.assertFalse(window.amount_received.isHidden())
+        window.payment_method.setCurrentText("upi")
+        controller.on_payment_method_changed("upi")
+        self.assertTrue(window.amount_received.isHidden())
 
         table_item = window.table_list.item(0)
         controller.on_table_selected(table_item)
         menu_item_widget = window.item_list.item(0)
         controller.add_selected_item(menu_item_widget)
         window.payment_method.setCurrentText("cash")
+        self.assertFalse(window.amount_received.isHidden())
+        window.discount_spin.setValue(10)
+        window.service_charge_spin.setValue(5)
+        controller.apply_adjustments()
         window.amount_received.setValue(200)
         controller.take_payment()
 

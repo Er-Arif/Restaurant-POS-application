@@ -91,8 +91,14 @@ class ServiceTests(unittest.TestCase):
         order = orders.open_table_order(table_rows[0]["id"], user["id"])
         order = orders.add_item(order["id"], item["id"], qty=2)
         self.assertAlmostEqual(order["subtotal"], 200.0, places=2)
+        self.assertAlmostEqual(order["discount_percent"], 10.0, places=2)
+        self.assertAlmostEqual(order["service_charge_percent"], 20.0, places=2)
+        self.assertAlmostEqual(order["discount_amount"], 20.0, places=2)
+        self.assertAlmostEqual(order["service_charge_amount"], 36.0, places=2)
+        self.assertAlmostEqual(order["grand_total"], 226.8, places=2)
         payment = payments.settle(order["id"], "cash", 500)
-        self.assertAlmostEqual(payment["change_returned"], 279.5, places=2)
+        self.assertAlmostEqual(payment["paid_amount"], 227.0, places=2)
+        self.assertAlmostEqual(payment["change_returned"], 273.0, places=2)
 
     def test_license_activation_and_validation(self):
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

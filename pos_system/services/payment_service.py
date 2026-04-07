@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -22,10 +24,11 @@ class PaymentService:
                 raise ValueError("Order not found.")
             if order.status != OrderStatus.OPEN:
                 raise ValueError("Only open orders can be settled.")
-            paid_amount = as_decimal(order.grand_total)
+            exact_amount = as_decimal(order.grand_total)
+            paid_amount = exact_amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP) if payment_method == PaymentMethod.CASH else exact_amount
             received = as_decimal(amount_received if payment_method == PaymentMethod.CASH else paid_amount)
             if payment_method == PaymentMethod.CASH and received < paid_amount:
-                raise ValueError("Cash received is less than the bill total.")
+                raise ValueError("Cash received is less than the rounded bill total.")
             change_returned = received - paid_amount if payment_method == PaymentMethod.CASH else as_decimal(0)
             payment = Payment(
                 order_id=order.id,

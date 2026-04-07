@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, selectinload
@@ -92,11 +92,11 @@ class OrderService:
             order = self._load_order(session, order_id)
             return self._serialize_order(order)
 
-    def update_adjustments(self, order_id: int, discount_amount: float, service_charge_amount: float) -> dict:
+    def update_adjustments(self, order_id: int, discount_percent: float, service_charge_percent: float) -> dict:
         with session_scope() as session:
             order = self._load_order(session, order_id)
-            order.discount_amount = as_decimal(discount_amount)
-            order.service_charge_amount = as_decimal(service_charge_amount)
+            order.discount_amount = as_decimal(discount_percent)
+            order.service_charge_amount = as_decimal(service_charge_percent)
             self._reprice_with_session(session, order)
             session.expire_all()
             order = self._load_order(session, order_id)
@@ -146,16 +146,21 @@ class OrderService:
 
     def _reprice_with_session(self, session, order: Order) -> OrderTotals:
         subtotal = sum((as_decimal(item.line_total) for item in order.items), start=Decimal("0.00"))
-        discount_amount = as_decimal(order.discount_amount)
-        service_charge_amount = as_decimal(order.service_charge_amount)
+        discount_percent = as_decimal(order.discount_amount)
+        service_charge_percent = as_decimal(order.service_charge_amount)
         gst_percent = as_decimal(order.gst_percent)
         if subtotal == Decimal("0.00"):
+            discount_amount = Decimal("0.00")
+            service_charge_amount = Decimal("0.00")
             gst_amount = Decimal("0.00")
             grand_total = Decimal("0.00")
         else:
-            taxable_amount = max(subtotal - discount_amount, Decimal("0.00")) + service_charge_amount
-            gst_amount = (taxable_amount * gst_percent / Decimal("100")).quantize(Decimal("0.01"))
-            grand_total = (taxable_amount + gst_amount).quantize(Decimal("0.01"))
+            discount_amount = (subtotal * discount_percent / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            base_after_discount = max(subtotal - discount_amount, Decimal("0.00"))
+            service_charge_amount = (base_after_discount * service_charge_percent / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            taxable_amount = base_after_discount + service_charge_amount
+            gst_amount = (taxable_amount * gst_percent / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            grand_total = (taxable_amount + gst_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         order.subtotal = subtotal
         order.gst_amount = gst_amount
@@ -176,6 +181,13 @@ class OrderService:
 
     @staticmethod
     def _serialize_order(order: Order) -> dict:
+        subtotal = as_decimal(order.subtotal or 0)
+        discount_percent = as_decimal(order.discount_amount or 0)
+        service_charge_percent = as_decimal(order.service_charge_amount or 0)
+        discount_amount = (subtotal * discount_percent / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if subtotal else Decimal("0.00")
+        base_after_discount = max(subtotal - discount_amount, Decimal("0.00"))
+        service_charge_amount = (base_after_discount * service_charge_percent / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if subtotal else Decimal("0.00")
+        cash_round_total = as_decimal(order.grand_total or 0).quantize(Decimal("1"), rounding=ROUND_HALF_UP) if order.grand_total is not None else Decimal("0")
         return {
             "id": order.id,
             "order_number": order.order_number,
@@ -185,11 +197,14 @@ class OrderService:
             "created_by_username": order.created_by.username if order.created_by else "",
             "status": order.status.value,
             "subtotal": float(order.subtotal or 0),
-            "discount_amount": float(order.discount_amount or 0),
-            "service_charge_amount": float(order.service_charge_amount or 0),
+            "discount_percent": float(discount_percent),
+            "discount_amount": float(discount_amount),
+            "service_charge_percent": float(service_charge_percent),
+            "service_charge_amount": float(service_charge_amount),
             "gst_percent": float(order.gst_percent or 0),
             "gst_amount": float(order.gst_amount or 0),
             "grand_total": float(order.grand_total or 0),
+            "cash_round_total": float(cash_round_total),
             "created_at": order.created_at,
             "items": [
                 {
