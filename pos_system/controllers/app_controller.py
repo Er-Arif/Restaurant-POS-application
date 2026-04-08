@@ -43,6 +43,8 @@ class AppController:
         self.login_screen = None
         self.admin_window = None
         self.pos_window = None
+        self.admin_controller = None
+        self.pos_controller = None
 
     def start(self) -> None:
         if developer_license_bypass_enabled():
@@ -170,6 +172,10 @@ class AppController:
         window.logout_button.clicked.connect(self.show_login)
         self.pos_window = window
         self.pos_controller = controller
+        screen = self.app.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            window.resize(int(available.width() * 0.9), int(available.height() * 0.9))
         window.show()
 
     def close_current_windows(self) -> None:
@@ -178,6 +184,8 @@ class AppController:
             if window:
                 window.close()
                 setattr(self, attr, None)
+        self.admin_controller = None
+        self.pos_controller = None
 
     def seed_default_categories(self) -> None:
         if self.menu_service.list_categories():
@@ -221,4 +229,5 @@ class AppController:
         if not self.table_service.list_tables():
             self.table_service.initialize_tables(10, "T")
         self.seed_default_categories()
+
 

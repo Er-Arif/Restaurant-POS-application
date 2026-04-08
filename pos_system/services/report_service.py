@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
 
@@ -21,6 +22,9 @@ class ReportSummary:
     total_revenue: Decimal
     cash_revenue: Decimal
     upi_revenue: Decimal
+    average_bill: Decimal = Decimal("0.00")
+    top_items: list[tuple[str, int]] = field(default_factory=list)
+    recent_orders: list[dict] = field(default_factory=list)
 
 
 class ReportService:
@@ -29,17 +33,35 @@ class ReportService:
         total_revenue = sum((as_decimal(order.grand_total) for order in orders), start=Decimal("0.00"))
         cash_revenue = Decimal("0.00")
         upi_revenue = Decimal("0.00")
+        item_counter: Counter[str] = Counter()
+        recent_orders: list[dict] = []
         for order in orders:
             for payment in order.payments:
                 if payment.method == PaymentMethod.CASH:
                     cash_revenue += as_decimal(payment.paid_amount)
                 elif payment.method == PaymentMethod.UPI:
                     upi_revenue += as_decimal(payment.paid_amount)
+            for item in order.items:
+                item_counter[item.item_name_snapshot] += item.quantity
+            recent_orders.append(
+                {
+                    "order_number": order.order_number,
+                    "table_name": order.table.name if order.table else "",
+                    "created_by": order.created_by.username if order.created_by else "",
+                    "total": float(order.grand_total or 0),
+                    "created_at": order.created_at,
+                    "payment_method": order.payments[0].method.value if order.payments else "",
+                }
+            )
+        average_bill = (total_revenue / len(orders)).quantize(Decimal("0.01")) if orders else Decimal("0.00")
         return ReportSummary(
             order_count=len(orders),
             total_revenue=total_revenue,
             cash_revenue=cash_revenue,
             upi_revenue=upi_revenue,
+            average_bill=average_bill,
+            top_items=item_counter.most_common(5),
+            recent_orders=recent_orders[:8],
         )
 
     def export_orders_csv(self, filters: dict) -> str:
@@ -92,7 +114,8 @@ class ReportService:
             orders = session.scalars(
                 select(Order)
                 .where(Order.status == OrderStatus.PAID, Order.created_at >= start_dt, Order.created_at <= end_dt)
-                .options(selectinload(Order.payments), joinedload(Order.table), joinedload(Order.created_by))
+                .options(selectinload(Order.payments), selectinload(Order.items), joinedload(Order.table), joinedload(Order.created_by))
                 .order_by(Order.created_at.desc())
             ).unique().all()
             return orders
+

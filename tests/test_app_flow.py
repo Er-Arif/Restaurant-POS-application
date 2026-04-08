@@ -122,6 +122,19 @@ class AppFlowTests(unittest.TestCase):
         self.assertEqual(session_user.username, "arif")
         self.assertEqual(session_user.role, UserRole.ADMIN)
 
+    def test_all_admin_tables_are_read_only(self):
+        window = AdminDashboardWindow()
+        tables = [
+            window.overview_recent_orders,
+            window.menu_items_table,
+            window.users_table,
+            window.orders_table,
+            window.order_detail_items,
+            window.report_orders_table,
+        ]
+        for table in tables:
+            self.assertEqual(table.editTriggers(), table.EditTrigger.NoEditTriggers)
+
     def test_inactive_user_cannot_login(self):
         auth = AuthService()
         auth.create_user("inactive", "pass123", UserRole.STAFF, is_active=False)
@@ -309,6 +322,13 @@ class AppFlowTests(unittest.TestCase):
         staff_user = next(user for user in users if user["username"] == "staff1")
         self.assertEqual(staff_user["full_name"], "Staff One")
 
+        window.tabs.setCurrentWidget(window.reports_tab)
+        controller.apply_report_preset("Today")
+        controller.refresh_report_summary()
+        self.assertEqual(window.report_preset.currentText(), "Today")
+        self.assertEqual(window.report_orders_value.text(), "0")
+        self.assertIn("Date Range:", window.report_summary.text())
+
         window.settings_restaurant_name.setText("Admin Cafe Updated")
         controller.save_settings()
         self.assertEqual(SettingsService().get_settings()["restaurant_name"], "Admin Cafe Updated")
@@ -371,7 +391,8 @@ class AppFlowTests(unittest.TestCase):
 
     @patch.object(QMessageBox, "information")
     @patch.object(QMessageBox, "warning")
-    def test_staff_pos_flow(self, mock_warning, mock_info):
+    @patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes)
+    def test_staff_pos_flow(self, mock_question, mock_warning, mock_info):
         self._seed_ready_state()
         session_user = AuthService().login("staffflow", "pass123")
         window = PosWindow()
@@ -393,15 +414,28 @@ class AppFlowTests(unittest.TestCase):
 
         table_item = window.table_list.item(0)
         controller.on_table_selected(table_item)
+        self.assertIsNotNone(controller.current_order)
+        controller.cancel_current_order()
+        self.assertIsNone(controller.current_order)
+        self.assertEqual(len(OrderService().list_orders("cancelled")), 1)
+
+        table_item = window.table_list.item(0)
+        controller.on_table_selected(table_item)
         menu_item_widget = window.item_list.item(0)
         controller.add_selected_item(menu_item_widget)
         window.payment_method.setCurrentText("cash")
         self.assertFalse(window.amount_received.isHidden())
         window.discount_spin.setValue(10)
         window.service_charge_spin.setValue(5)
-        controller.apply_adjustments()
+        controller.apply_adjustments_immediately()
         window.amount_received.setValue(200)
+        controller.show_receipt_preview = Mock(
+            side_effect=lambda order, payment=None: controller.print_service.save_receipt_pdf(
+                order, SettingsService().get_settings()
+            )
+        )
         controller.take_payment()
+        controller.show_receipt_preview.assert_called_once()
 
         paid_orders = OrderService().list_orders("paid")
         self.assertEqual(len(paid_orders), 1)
@@ -409,10 +443,6 @@ class AppFlowTests(unittest.TestCase):
         self.assertTrue(app_config.RECEIPT_PREVIEW_FILE.exists())
         self.assertGreaterEqual(len(list(app_config.RECEIPTS_DIR.glob("receipt_*.txt"))), 1)
         self.assertGreaterEqual(len(list(app_config.RECEIPTS_DIR.glob("receipt_*.pdf"))), 1)
-
-        controller.print_service.print_receipt_dialog = Mock(return_value="Receipt sent")
-        controller.reprint_receipt()
-        controller.print_service.print_receipt_dialog.assert_called_once()
 
         controller.export_receipt_pdf()
         self.assertGreaterEqual(mock_info.call_count, 2)

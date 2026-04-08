@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import shutil
 from pathlib import Path
@@ -31,7 +31,7 @@ class SettingsService:
             settings.address = payload.get("address", "").strip()
             settings.phone = payload.get("phone", "").strip()
             settings.gst_number = payload.get("gst_number", "").strip()
-            settings.currency_symbol = payload.get("currency_symbol", "₹").strip() or "₹"
+            settings.currency_symbol = payload.get("currency_symbol", "?").strip() or "?"
             settings.receipt_footer = payload.get("receipt_footer", "").strip() or "Thank you for dining with us!"
             settings.gst_percent = as_decimal(payload.get("gst_percent", 0))
             settings.default_discount_amount = as_decimal(payload.get("default_discount_amount", 0))

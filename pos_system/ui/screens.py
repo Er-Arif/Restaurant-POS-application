@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialog,
     QDateEdit,
     QDoubleSpinBox,
     QFileDialog,
@@ -200,6 +201,36 @@ class LoginScreen(QWidget):
         self.resize(420, 260)
 
 
+class ReceiptPreviewDialog(QDialog):
+    def __init__(self, receipt_text: str, parent=None, *, is_html: bool = False):
+        super().__init__(parent)
+        self.setWindowTitle("Receipt Preview")
+        self.setModal(True)
+        layout = QVBoxLayout(self)
+        title = QLabel("Receipt Preview")
+        title.setStyleSheet("font-size: 16pt; font-weight: 700;")
+        self.preview = QTextEdit()
+        self.preview.setReadOnly(True)
+        if is_html:
+            self.preview.setHtml(receipt_text)
+        else:
+            self.preview.setPlainText(receipt_text)
+        self.status_label = QLabel("")
+        button_row = QHBoxLayout()
+        self.print_button = QPushButton("Print Receipt")
+        self.save_pdf_button = QPushButton("Save Receipt PDF")
+        self.close_button = QPushButton("Close")
+        button_row.addWidget(self.print_button)
+        button_row.addWidget(self.save_pdf_button)
+        button_row.addStretch(1)
+        button_row.addWidget(self.close_button)
+        layout.addWidget(title)
+        layout.addWidget(self.preview)
+        layout.addWidget(self.status_label)
+        layout.addLayout(button_row)
+        self.resize(620, 700)
+
+
 class AdminDashboardWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -258,6 +289,9 @@ class AdminDashboardWindow(QMainWindow):
         self.overview_recent_orders = QTableWidget(0, 5)
         self.overview_recent_orders.setHorizontalHeaderLabels(["Order #", "Table", "Status", "Total", "Created"])
         self.overview_recent_orders.horizontalHeader().setStretchLastSection(True)
+        self.overview_recent_orders.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.overview_recent_orders.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.overview_recent_orders.setSelectionMode(QAbstractItemView.SingleSelection)
         recent_orders_layout.addWidget(self.overview_recent_orders)
         overview_layout.addWidget(recent_orders_box)
         self.tabs.addTab(self.overview_tab, "Overview")
@@ -387,6 +421,9 @@ class AdminDashboardWindow(QMainWindow):
             ["ID", "Order #", "Table", "User", "Status", "Subtotal", "Total", "Created At"]
         )
         self.orders_table.horizontalHeader().setStretchLastSection(True)
+        self.orders_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.orders_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.orders_table.setSelectionMode(QAbstractItemView.SingleSelection)
         order_detail_box = QGroupBox("Order Details")
         order_detail_layout = QVBoxLayout(order_detail_box)
         self.order_detail_summary = QLabel("Select an order to view details.")
@@ -394,6 +431,9 @@ class AdminDashboardWindow(QMainWindow):
         self.order_detail_items = QTableWidget(0, 4)
         self.order_detail_items.setHorizontalHeaderLabels(["Item", "Qty", "Unit", "Line Total"])
         self.order_detail_items.horizontalHeader().setStretchLastSection(True)
+        self.order_detail_items.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.order_detail_items.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.order_detail_items.setSelectionMode(QAbstractItemView.SingleSelection)
         self.order_detail_payments = QPlainTextEdit()
         self.order_detail_payments.setReadOnly(True)
         order_detail_layout.addWidget(self.order_detail_summary)
@@ -409,6 +449,8 @@ class AdminDashboardWindow(QMainWindow):
         self.reports_tab = QWidget()
         reports_layout = QVBoxLayout(self.reports_tab)
         reports_controls = QHBoxLayout()
+        self.report_preset = QComboBox()
+        self.report_preset.addItems(["Today", "Last 7 Days", "This Month", "Custom"])
         self.report_start = QDateEdit()
         self.report_start.setCalendarPopup(True)
         self.report_start.setDate(date.today())
@@ -417,6 +459,8 @@ class AdminDashboardWindow(QMainWindow):
         self.report_end.setDate(date.today())
         self.refresh_report_button = QPushButton("Refresh Summary")
         self.export_csv_button = QPushButton("Export CSV")
+        reports_controls.addWidget(QLabel("Preset"))
+        reports_controls.addWidget(self.report_preset)
         reports_controls.addWidget(QLabel("From"))
         reports_controls.addWidget(self.report_start)
         reports_controls.addWidget(QLabel("To"))
@@ -424,11 +468,47 @@ class AdminDashboardWindow(QMainWindow):
         reports_controls.addWidget(self.refresh_report_button)
         reports_controls.addWidget(self.export_csv_button)
         reports_controls.addStretch(1)
+
+        report_metrics = QGridLayout()
+        report_orders_card, self.report_orders_value, self.report_orders_meta = self._build_metric_card("Orders")
+        report_revenue_card, self.report_revenue_value, self.report_revenue_meta = self._build_metric_card("Revenue")
+        report_average_card, self.report_average_value, self.report_average_meta = self._build_metric_card("Average Bill")
+        report_cash_card, self.report_cash_value, self.report_cash_meta = self._build_metric_card("Cash")
+        report_upi_card, self.report_upi_value, self.report_upi_meta = self._build_metric_card("UPI")
+        report_metrics.addWidget(report_orders_card, 0, 0)
+        report_metrics.addWidget(report_revenue_card, 0, 1)
+        report_metrics.addWidget(report_average_card, 0, 2)
+        report_metrics.addWidget(report_cash_card, 1, 0)
+        report_metrics.addWidget(report_upi_card, 1, 1)
+
+        insights_layout = QHBoxLayout()
+        self.report_top_items_box = QGroupBox("Top Items")
+        top_items_layout = QVBoxLayout(self.report_top_items_box)
+        self.report_top_items = QLabel("")
+        self.report_top_items.setWordWrap(True)
+        top_items_layout.addWidget(self.report_top_items)
+
+        self.report_summary_box = QGroupBox("Summary")
+        summary_layout = QVBoxLayout(self.report_summary_box)
         self.report_summary = QLabel("")
         self.report_summary.setWordWrap(True)
+        summary_layout.addWidget(self.report_summary)
+
+        insights_layout.addWidget(self.report_summary_box, 1)
+        insights_layout.addWidget(self.report_top_items_box, 1)
+
+        self.report_orders_table = QTableWidget(0, 6)
+        self.report_orders_table.setHorizontalHeaderLabels(["Order #", "Table", "Cashier", "Payment", "Total", "Created"])
+        self.report_orders_table.horizontalHeader().setStretchLastSection(True)
+        self.report_orders_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.report_orders_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.report_orders_table.setSelectionMode(QAbstractItemView.SingleSelection)
+
         reports_layout.addLayout(reports_controls)
-        reports_layout.addWidget(self.report_summary)
-        reports_layout.addStretch(1)
+        reports_layout.addLayout(report_metrics)
+        reports_layout.addLayout(insights_layout)
+        reports_layout.addWidget(QLabel("Paid Orders In Range"))
+        reports_layout.addWidget(self.report_orders_table)
         self.tabs.addTab(self.reports_tab, "Reports")
 
         self.settings_tab = QWidget()
@@ -464,8 +544,9 @@ class AdminDashboardWindow(QMainWindow):
         settings_form.addRow("GST %", self.settings_gst_percent)
         settings_form.addRow("Default Discount", self.settings_discount)
         settings_form.addRow("Service Charge", self.settings_service_charge)
-        settings_form.addRow("Receipt Footer", self.settings_receipt_footer)
         settings_form.addRow("Logo", settings_logo_row)
+        settings_form.addRow("Receipt Footer", self.settings_receipt_footer)
+
         self.save_settings_button = QPushButton("Save Settings")
         settings_layout.addLayout(settings_form)
         settings_layout.addWidget(self.save_settings_button)
@@ -521,6 +602,8 @@ class PosWindow(QMainWindow):
         self.setWindowTitle("POS Terminal")
         central = QWidget()
         root = QHBoxLayout(central)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(12)
         self.setCentralWidget(central)
 
         left_box = QGroupBox("Tables")
@@ -537,19 +620,32 @@ class PosWindow(QMainWindow):
         middle_header.setStyleSheet("font-size: 11pt; color: #52606d; font-weight: 600;")
         self.category_bar = QListWidget()
         self.category_bar.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.category_bar.setMaximumHeight(140)
         self.category_bar.setSpacing(4)
+        self.menu_search = QLineEdit()
+        self.menu_search.setPlaceholderText("Search menu items")
         self.item_list = QListWidget()
         self.item_list.setSpacing(10)
         middle_layout.addWidget(middle_header)
         middle_layout.addWidget(self.category_bar)
+        middle_layout.addWidget(self.menu_search)
         middle_layout.addWidget(self.item_list)
 
         right_box = QGroupBox("Active Ticket")
         right_layout = QVBoxLayout(right_box)
         right_layout.setContentsMargins(12, 12, 12, 12)
         right_layout.setSpacing(12)
+        top_meta_row = QHBoxLayout()
         self.user_label = QLabel("")
+        self.logout_button = QPushButton("Logout")
+        self.pay_button = QPushButton("Payment [F4]")
+        self.cancel_order_button = QPushButton("Cancel [F3]")
+        self.cancel_order_button.setToolTip("Shortcut: F3")
+        self.pay_button.setToolTip("Shortcut: F4")
+        top_meta_row.addWidget(self.user_label)
+        top_meta_row.addStretch(1)
+        top_meta_row.addWidget(self.cancel_order_button)
+        top_meta_row.addWidget(self.pay_button)
+        top_meta_row.addWidget(self.logout_button)
         self.order_meta = QLabel("Select a table to begin.")
 
         ticket_box = QGroupBox("Order & Charges")
@@ -560,7 +656,8 @@ class PosWindow(QMainWindow):
         self.order_items_table = QTableWidget(0, 5)
         self.order_items_table.setHorizontalHeaderLabels(["Item", "Qty", "Unit Price", "Line Total", "Actions"])
         self.order_items_table.horizontalHeader().setStretchLastSection(False)
-        self.order_items_table.setMinimumHeight(300)
+        self.order_items_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.order_items_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.order_items_table.verticalHeader().setDefaultSectionSize(54)
         self.order_items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.order_items_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -579,23 +676,24 @@ class PosWindow(QMainWindow):
         self.discount_spin = MoneySpinBox()
         self.discount_spin.setMaximum(100)
         self.discount_spin.setDecimals(2)
-        self.discount_spin.setMinimumWidth(220)
         self.discount_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.service_charge_spin = MoneySpinBox()
         self.service_charge_spin.setMaximum(100)
         self.service_charge_spin.setDecimals(2)
-        self.service_charge_spin.setMinimumWidth(220)
         self.service_charge_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.payment_method = QComboBox()
         self.payment_method.addItems([method.value for method in PaymentMethod])
-        self.payment_method.setMinimumWidth(220)
         self.payment_method.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.amount_received_label = QLabel("Received")
+        amount_label_policy = self.amount_received_label.sizePolicy()
+        amount_label_policy.setRetainSizeWhenHidden(True)
+        self.amount_received_label.setSizePolicy(amount_label_policy)
         self.amount_received = MoneySpinBox()
         self.amount_received.setMaximum(1000000)
         self.amount_received.setDecimals(2)
-        self.amount_received.setMinimumWidth(220)
-        self.amount_received.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        amount_input_policy = self.amount_received.sizePolicy()
+        amount_input_policy.setRetainSizeWhenHidden(True)
+        self.amount_received.setSizePolicy(amount_input_policy)
         controls_layout.addWidget(QLabel("Discount %"), 0, 0)
         controls_layout.addWidget(self.discount_spin, 0, 1)
         controls_layout.addWidget(QLabel("Service Charge %"), 0, 2)
@@ -611,9 +709,7 @@ class PosWindow(QMainWindow):
         self.totals_label = QLabel("")
         self.totals_label.setWordWrap(True)
         self.totals_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.done_button = QPushButton("Done")
         totals_row.addWidget(self.totals_label, 1)
-        totals_row.addWidget(self.done_button, 0, Qt.AlignBottom)
 
         footer_layout.addLayout(controls_layout)
         footer_layout.addLayout(totals_row)
@@ -621,33 +717,44 @@ class PosWindow(QMainWindow):
         ticket_layout.addWidget(self.order_items_table, 1)
         ticket_layout.addWidget(footer_box, 0)
 
-        actions_box = QGroupBox("Actions")
-        actions_layout = QVBoxLayout(actions_box)
-        self.pay_button = QPushButton("Take Payment")
-        self.print_button = QPushButton("Print Receipt")
-        self.logout_button = QPushButton("Logout")
-        for button in (self.done_button, self.pay_button, self.print_button, self.logout_button):
-            button.setMinimumHeight(48)
-        actions_layout.addWidget(self.pay_button)
-        actions_layout.addWidget(self.print_button)
-        actions_layout.addWidget(self.logout_button)
-        actions_layout.addStretch(1)
-
-        right_layout.addWidget(self.user_label)
+        right_layout.addLayout(top_meta_row)
         right_layout.addWidget(self.order_meta)
         right_layout.addWidget(ticket_box, 1)
-        right_layout.addWidget(actions_box, 0)
-
-        right_scroll = QScrollArea()
-        right_scroll.setWidgetResizable(True)
-        right_scroll.setWidget(right_box)
 
         root.addWidget(left_box, 1)
         root.addWidget(middle_box, 1)
-        root.addWidget(right_scroll, 3)
-        self.resize(1440, 860)
+        root.addWidget(right_box, 3)
+        self._apply_responsive_metrics()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_responsive_metrics()
+
+    def _apply_responsive_metrics(self) -> None:
+        size = self.size()
+        if not size.isValid():
+            return
+        height = max(size.height(), 1)
+        width = max(size.width(), 1)
+
+        category_height = max(90, int(height * 0.16))
+        top_button_height = max(34, int(height * 0.045))
+        order_table_height = max(220, int(height * 0.38))
+        field_width = max(120, int(width * 0.07))
+
+        self.category_bar.setMaximumHeight(category_height)
+        self.logout_button.setMinimumHeight(top_button_height)
+        self.cancel_order_button.setMinimumHeight(top_button_height)
+        self.pay_button.setMinimumHeight(top_button_height)
+        self.order_items_table.setMinimumHeight(order_table_height)
+        self.order_items_table.setMaximumHeight(order_table_height)
+        self.discount_spin.setMinimumWidth(field_width)
+        self.service_charge_spin.setMinimumWidth(field_width)
+        self.payment_method.setMinimumWidth(field_width)
+        self.amount_received.setMinimumWidth(field_width)
 
     @staticmethod
     def show_message(parent, title: str, text: str) -> None:
         QMessageBox.information(parent, title, text)
+
 

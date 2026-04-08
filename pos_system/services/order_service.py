@@ -177,7 +177,7 @@ class OrderService:
 
     @staticmethod
     def _generate_order_number(table_code: str) -> str:
-        return f"{table_code}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+        return f"{table_code}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}"
 
     @staticmethod
     def _serialize_order(order: Order) -> dict:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox, QTableWidgetItem
@@ -65,6 +65,7 @@ class AdminController:
         self.window.cancel_order_button.clicked.connect(self.cancel_selected_order)
         self.window.print_order_receipt_button.clicked.connect(self.print_selected_order_receipt)
         self.window.save_order_pdf_button.clicked.connect(self.save_selected_order_pdf)
+        self.window.report_preset.currentTextChanged.connect(self.apply_report_preset)
         self.window.refresh_report_button.clicked.connect(self.refresh_report_summary)
         self.window.export_csv_button.clicked.connect(self.export_report_csv)
         self.window.save_settings_button.clicked.connect(self.save_settings)
@@ -77,6 +78,7 @@ class AdminController:
         self.refresh_menu_items()
         self.refresh_users()
         self.refresh_orders()
+        self.apply_report_preset(self.window.report_preset.currentText())
         self.refresh_report_summary()
         self.refresh_settings()
         self.refresh_backups()
@@ -527,19 +529,61 @@ class AdminController:
         except Exception as exc:
             QMessageBox.warning(self.window, "PDF Error", str(exc))
 
+    def apply_report_preset(self, preset: str) -> None:
+        today = date.today()
+        if preset == "Today":
+            start_date = today
+            end_date = today
+        elif preset == "Last 7 Days":
+            start_date = today - timedelta(days=6)
+            end_date = today
+        elif preset == "This Month":
+            start_date = today.replace(day=1)
+            end_date = today
+        else:
+            return
+        self.window.report_start.setDate(start_date)
+        self.window.report_end.setDate(end_date)
+
     def refresh_report_summary(self) -> None:
-        summary = self.report_service.sales_summary(
-            self.window.report_start.date().toPython(),
-            self.window.report_end.date().toPython(),
-        )
+        start_date = self.window.report_start.date().toPython()
+        end_date = self.window.report_end.date().toPython()
+        summary = self.report_service.sales_summary(start_date, end_date)
+        currency = self.settings_service.get_settings().get("currency_symbol") or "?"
+        self.window.report_orders_value.setText(str(summary.order_count))
+        self.window.report_orders_meta.setText(f"Paid orders from {start_date.isoformat()} to {end_date.isoformat()}")
+        self.window.report_revenue_value.setText(money_text(summary.total_revenue, currency))
+        self.window.report_revenue_meta.setText("Total paid revenue in selected range")
+        self.window.report_average_value.setText(money_text(summary.average_bill, currency))
+        self.window.report_average_meta.setText("Average bill across paid orders")
+        self.window.report_cash_value.setText(money_text(summary.cash_revenue, currency))
+        self.window.report_cash_meta.setText("Cash collected in selected range")
+        self.window.report_upi_value.setText(money_text(summary.upi_revenue, currency))
+        self.window.report_upi_meta.setText("UPI collected in selected range")
         self.window.report_summary.setText(
             (
-                f"Orders: {summary.order_count}\n"
-                f"Revenue: {summary.total_revenue:.2f}\n"
-                f"Cash: {summary.cash_revenue:.2f}\n"
-                f"UPI: {summary.upi_revenue:.2f}"
+                f"Date Range: {start_date.isoformat()} to {end_date.isoformat()}\n"
+                f"Paid Orders: {summary.order_count}\n"
+                f"Revenue: {money_text(summary.total_revenue, currency)}\n"
+                f"Cash vs UPI: {money_text(summary.cash_revenue, currency)} / {money_text(summary.upi_revenue, currency)}"
             )
         )
+        if summary.top_items:
+            self.window.report_top_items.setText("\n".join(f"{name}: {qty} sold" for name, qty in summary.top_items))
+        else:
+            self.window.report_top_items.setText("No paid-item sales in this date range yet.")
+        self.window.report_orders_table.setRowCount(len(summary.recent_orders))
+        for row, order in enumerate(summary.recent_orders):
+            values = [
+                order["order_number"],
+                order["table_name"],
+                order["created_by"],
+                order["payment_method"].upper(),
+                money_text(order["total"], currency),
+                order["created_at"].strftime("%Y-%m-%d %H:%M"),
+            ]
+            for column, value in enumerate(values):
+                self.window.report_orders_table.setItem(row, column, QTableWidgetItem(str(value)))
 
     def export_report_csv(self) -> None:
         try:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidgetItem, QMessageBox, QPushButton, QTableWidgetItem, QVBoxLayout, QWidget
 
 
@@ -17,15 +18,28 @@ class PosController:
         self.selected_table_id = None
         self.current_order = None
         self.last_completed_order = None
+        self.suppress_adjustment_autosave = False
+        self.adjustment_timer = QTimer(self.window)
+        self.adjustment_timer.setSingleShot(True)
+        self.adjustment_timer.setInterval(450)
+        self.cancel_shortcut = QShortcut(QKeySequence("F3"), self.window)
+        self.pay_shortcut = QShortcut(QKeySequence("F4"), self.window)
         self._bind()
 
     def _bind(self) -> None:
         self.window.table_list.itemClicked.connect(self.on_table_selected)
         self.window.category_bar.itemClicked.connect(self.on_category_selected)
-        self.window.done_button.clicked.connect(self.apply_adjustments)
+        self.window.menu_search.textChanged.connect(self.refresh_menu_items)
+        self.window.discount_spin.valueChanged.connect(self.queue_adjustments)
+        self.window.service_charge_spin.valueChanged.connect(self.queue_adjustments)
+        self.window.discount_spin.editingFinished.connect(self.apply_adjustments_immediately)
+        self.window.service_charge_spin.editingFinished.connect(self.apply_adjustments_immediately)
+        self.adjustment_timer.timeout.connect(self.apply_adjustments)
         self.window.payment_method.currentTextChanged.connect(self.on_payment_method_changed)
         self.window.pay_button.clicked.connect(self.take_payment)
-        self.window.print_button.clicked.connect(self.reprint_receipt)
+        self.window.cancel_order_button.clicked.connect(self.cancel_current_order)
+        self.cancel_shortcut.activated.connect(self.cancel_current_order)
+        self.pay_shortcut.activated.connect(self.take_payment)
 
     def load(self) -> None:
         self.window.user_label.setText(f"Signed in as {self.session_user.username} ({self.session_user.role.value})")
@@ -70,7 +84,10 @@ class PosController:
         self.window.item_list.clear()
         selected_category = self.window.category_bar.currentItem()
         category_id = selected_category.data(Qt.UserRole) if selected_category else None
+        search_text = self.window.menu_search.text().strip().lower()
         for item in self.menu_service.list_menu_items(category_id=category_id, only_available=True):
+            if search_text and search_text not in item["name"].lower():
+                continue
             list_item = QListWidgetItem()
             list_item.setData(Qt.UserRole, item["id"])
             row_widget = QWidget()
@@ -125,8 +142,19 @@ class PosController:
         except Exception as exc:
             QMessageBox.warning(self.window, "Remove Error", str(exc))
 
+    def queue_adjustments(self) -> None:
+        if self.suppress_adjustment_autosave or not self.current_order:
+            return
+        self.adjustment_timer.start()
+
+    def apply_adjustments_immediately(self) -> None:
+        if self.suppress_adjustment_autosave or not self.current_order:
+            return
+        self.adjustment_timer.stop()
+        self.apply_adjustments()
+
     def apply_adjustments(self) -> None:
-        if not self.current_order:
+        if self.suppress_adjustment_autosave or not self.current_order:
             return
         try:
             self.current_order = self.order_service.update_adjustments(
@@ -158,23 +186,41 @@ class PosController:
                 self.window.amount_received.value(),
             )
             completed_order = self.order_service.get_order(self.current_order["id"])
-            settings = self.settings_service.get_settings()
-            self.print_service.save_receipt_pdf(completed_order, settings)
             self.last_completed_order = completed_order
-            if payment["method"] == "cash":
-                message = (
-                    f"Payment saved. Cash rounded total: {payment['paid_amount']:.2f}. "
-                    f"Change returned: {payment['change_returned']:.2f}."
-                )
-            else:
-                message = f"Payment saved. {payment['method'].upper()} collected exactly: {payment['paid_amount']:.2f}."
-            QMessageBox.information(self.window, "Payment Complete", message)
+            self.show_receipt_preview(completed_order, payment)
             self.current_order = None
             self.selected_table_id = None
             self._clear_ticket()
             self.refresh_tables()
         except Exception as exc:
             QMessageBox.warning(self.window, "Payment Error", str(exc))
+
+    def cancel_current_order(self) -> None:
+        if not self.current_order:
+            QMessageBox.warning(self.window, "No Open Order", "Select a table with an open order first.")
+            return
+        answer = QMessageBox.question(
+            self.window,
+            "Cancel Open Order",
+            "Cancel this open order and free the table? This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            cancelled_order = self.order_service.cancel_order(self.current_order["id"])
+            self.current_order = None
+            self.selected_table_id = None
+            self._clear_ticket()
+            self.refresh_tables()
+            QMessageBox.information(
+                self.window,
+                "Order Cancelled",
+                f"Order {cancelled_order['order_number']} has been cancelled and the table is now available.",
+            )
+        except Exception as exc:
+            QMessageBox.warning(self.window, "Cancel Order Error", str(exc))
 
     def reprint_receipt(self) -> None:
         order = self._receipt_order()
@@ -198,6 +244,36 @@ class PosController:
         except Exception as exc:
             QMessageBox.warning(self.window, "PDF Error", str(exc))
 
+    def show_receipt_preview(self, order: dict, payment: dict | None = None) -> None:
+        from pos_system.ui.screens import ReceiptPreviewDialog
+
+        settings = self.settings_service.get_settings()
+        receipt_text = self.print_service.render_receipt(order, settings)
+        receipt_html = self.print_service.render_receipt_html(order, settings)
+        dialog = ReceiptPreviewDialog(receipt_html, self.window, is_html=True)
+        if payment:
+            if payment["method"] == "cash":
+                dialog.status_label.setText(
+                    f"Payment saved. Cash rounded total: {payment['paid_amount']:.2f}. Change returned: {payment['change_returned']:.2f}."
+                )
+            else:
+                dialog.status_label.setText(
+                    f"Payment saved. {payment['method'].upper()} collected exactly: {payment['paid_amount']:.2f}."
+                )
+
+        def handle_print() -> None:
+            message = self.print_service.print_receipt_dialog(order, settings, dialog)
+            dialog.status_label.setText(message)
+
+        def handle_pdf() -> None:
+            pdf_path = self.print_service.save_receipt_pdf(order, settings)
+            dialog.status_label.setText(f"Receipt PDF saved to {pdf_path}")
+
+        dialog.print_button.clicked.connect(handle_print)
+        dialog.save_pdf_button.clicked.connect(handle_pdf)
+        dialog.close_button.clicked.connect(dialog.accept)
+        dialog.exec()
+
     def _receipt_order(self):
         return self.current_order or self.last_completed_order
 
@@ -209,18 +285,8 @@ class PosController:
             f"Order {self.current_order['order_number']} | Table {self.current_order['table_name']} | Status {self.current_order['status']}"
         )
         table = self.window.order_items_table
-        viewport_width = max(table.viewport().width(), 640)
-        qty_width = 70
-        unit_width = 110
-        total_width = 120
-        action_width = 200
-        name_width = max(180, viewport_width - qty_width - unit_width - total_width - action_width - 24)
-        table.setColumnWidth(0, name_width)
-        table.setColumnWidth(1, qty_width)
-        table.setColumnWidth(2, unit_width)
-        table.setColumnWidth(3, total_width)
-        table.setColumnWidth(4, action_width)
         table.setRowCount(len(self.current_order["items"]))
+        self._resize_order_table_columns()
         for row, item in enumerate(self.current_order["items"]):
             name_cell = QTableWidgetItem(item["name"])
             name_cell.setData(Qt.UserRole, item["id"])
@@ -232,9 +298,48 @@ class PosController:
             table.setItem(row, 2, unit_cell)
             table.setItem(row, 3, line_total_cell)
             table.setCellWidget(row, 4, self._build_order_action_widget(item))
+        self.suppress_adjustment_autosave = True
         self.window.discount_spin.setValue(self.current_order.get("discount_percent", 0))
         self.window.service_charge_spin.setValue(self.current_order.get("service_charge_percent", 0))
+        self.suppress_adjustment_autosave = False
         self._update_totals_label()
+
+    def _resize_order_table_columns(self) -> None:
+        table = self.window.order_items_table
+        viewport_width = table.viewport().width()
+        if viewport_width <= 0:
+            viewport_width = max(table.width() - table.verticalHeader().width() - 8, 520)
+        qty_width = 64
+        unit_width = 96
+        total_width = 104
+        action_width = 176
+        padding = 12
+        name_width = max(140, viewport_width - qty_width - unit_width - total_width - action_width - padding)
+        table.setColumnWidth(0, name_width)
+        table.setColumnWidth(1, qty_width)
+        table.setColumnWidth(2, unit_width)
+        table.setColumnWidth(3, total_width)
+        table.setColumnWidth(4, action_width)
+        table.horizontalScrollBar().setValue(0)
+        QTimer.singleShot(0, self._resize_order_table_columns_once)
+
+    def _resize_order_table_columns_once(self) -> None:
+        table = self.window.order_items_table
+        viewport_width = table.viewport().width()
+        if viewport_width <= 0:
+            return
+        qty_width = 64
+        unit_width = 96
+        total_width = 104
+        action_width = 176
+        padding = 12
+        name_width = max(140, viewport_width - qty_width - unit_width - total_width - action_width - padding)
+        table.setColumnWidth(0, name_width)
+        table.setColumnWidth(1, qty_width)
+        table.setColumnWidth(2, unit_width)
+        table.setColumnWidth(3, total_width)
+        table.setColumnWidth(4, action_width)
+        table.horizontalScrollBar().setValue(0)
 
     def _build_order_action_widget(self, item: dict) -> QWidget:
         widget = QWidget()
@@ -270,6 +375,11 @@ class PosController:
 
     def _clear_ticket(self) -> None:
         self.window.order_meta.setText("Select a table to begin.")
+        self.adjustment_timer.stop()
         self.window.order_items_table.setRowCount(0)
         self.window.totals_label.setText("")
+        self.suppress_adjustment_autosave = True
+        self.window.discount_spin.setValue(0)
+        self.window.service_charge_spin.setValue(0)
         self.window.amount_received.setValue(0)
+        self.suppress_adjustment_autosave = False
