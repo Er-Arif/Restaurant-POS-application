@@ -62,6 +62,12 @@ class MoneySpinBox(QDoubleSpinBox):
         return super().textFromValue(value)
 
 
+
+def _enable_enter_for_buttons(container: QWidget) -> None:
+    for button in container.findChildren(QPushButton):
+        button.setAutoDefault(True)
+        button.setFocusPolicy(Qt.StrongFocus)
+
 class ActivationScreen(QWidget):
     def __init__(self):
         super().__init__()
@@ -84,6 +90,7 @@ class ActivationScreen(QWidget):
         layout.addWidget(self.activate_button)
         layout.addStretch(1)
         self.resize(720, 500)
+        _enable_enter_for_buttons(self)
 
 
 class SetupWizardScreen(QWidget):
@@ -115,10 +122,12 @@ class SetupWizardScreen(QWidget):
         restaurant_form = QFormLayout(restaurant_box)
         self.restaurant_name = QLineEdit()
         self.address = QTextEdit()
+        self.address.setTabChangesFocus(True)
         self.phone = QLineEdit()
         self.gst_number = QLineEdit()
         self.currency_symbol = QLineEdit("?")
         self.receipt_footer = QTextEdit()
+        self.receipt_footer.setTabChangesFocus(True)
         self.logo_path = QLineEdit()
         self.logo_browse = QPushButton("Browse Logo")
         logo_row = QWidget()
@@ -171,6 +180,7 @@ class SetupWizardScreen(QWidget):
         scroll.setWidget(content)
         outer.addWidget(scroll)
         self.resize(800, 720)
+        _enable_enter_for_buttons(self)
 
     def choose_logo(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(self, "Select Logo", "", "Images (*.png *.jpg *.jpeg *.bmp)")
@@ -190,6 +200,10 @@ class LoginScreen(QWidget):
         self.password.setEchoMode(QLineEdit.Password)
         self.feedback_label = QLabel("")
         self.login_button = QPushButton("Login")
+        self.login_button.setDefault(True)
+        self.login_button.setAutoDefault(True)
+        self.username.returnPressed.connect(self.login_button.click)
+        self.password.returnPressed.connect(self.login_button.click)
         form = QFormLayout()
         form.addRow("Username", self.username)
         form.addRow("Password", self.password)
@@ -199,6 +213,7 @@ class LoginScreen(QWidget):
         layout.addWidget(self.login_button)
         layout.addStretch(1)
         self.resize(420, 260)
+        _enable_enter_for_buttons(self)
 
 
 class ReceiptPreviewDialog(QDialog):
@@ -229,6 +244,7 @@ class ReceiptPreviewDialog(QDialog):
         layout.addWidget(self.status_label)
         layout.addLayout(button_row)
         self.resize(620, 700)
+        _enable_enter_for_buttons(self)
 
 
 class AdminDashboardWindow(QMainWindow):
@@ -302,6 +318,7 @@ class AdminDashboardWindow(QMainWindow):
         category_layout = QVBoxLayout(category_box)
         self.category_name = QLineEdit()
         self.category_description = QTextEdit()
+        self.category_description.setTabChangesFocus(True)
         self.category_list = QListWidget()
         self.save_category_button = QPushButton("Save Category")
         self.clear_category_button = QPushButton("New Category")
@@ -325,6 +342,7 @@ class AdminDashboardWindow(QMainWindow):
         self.item_category_combo = QComboBox()
         self.item_name = QLineEdit()
         self.item_description = QTextEdit()
+        self.item_description.setTabChangesFocus(True)
         self.item_price = MoneySpinBox()
         self.item_price.setMaximum(100000)
         self.item_price.setDecimals(2)
@@ -516,6 +534,7 @@ class AdminDashboardWindow(QMainWindow):
         settings_form = QFormLayout()
         self.settings_restaurant_name = QLineEdit()
         self.settings_address = QTextEdit()
+        self.settings_address.setTabChangesFocus(True)
         self.settings_phone = QLineEdit()
         self.settings_gst_number = QLineEdit()
         self.settings_currency = QLineEdit("?")
@@ -529,6 +548,7 @@ class AdminDashboardWindow(QMainWindow):
         self.settings_service_charge.setMaximum(100000)
         self.settings_service_charge.setDecimals(2)
         self.settings_receipt_footer = QTextEdit()
+        self.settings_receipt_footer.setTabChangesFocus(True)
         self.settings_logo_path = QLineEdit()
         self.settings_logo_browse = QPushButton("Browse Logo")
         settings_logo_row = QWidget()
@@ -567,6 +587,7 @@ class AdminDashboardWindow(QMainWindow):
         backup_layout.addWidget(self.backup_status)
         self.tabs.addTab(self.backup_tab, "Backups")
         self.resize(1200, 800)
+        _enable_enter_for_buttons(self)
 
     def choose_settings_logo(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(self, "Select Logo", "", "Images (*.png *.jpg *.jpeg *.bmp)")
@@ -722,13 +743,15 @@ class PosWindow(QMainWindow):
         right_layout.addWidget(ticket_box, 1)
 
         root.addWidget(left_box, 1)
-        root.addWidget(middle_box, 1)
-        root.addWidget(right_box, 3)
+        root.addWidget(middle_box, 2)
+        root.addWidget(right_box, 4)
         self._apply_responsive_metrics()
+        _enable_enter_for_buttons(self)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._apply_responsive_metrics()
+        _enable_enter_for_buttons(self)
 
     def _apply_responsive_metrics(self) -> None:
         size = self.size()
@@ -756,5 +779,9 @@ class PosWindow(QMainWindow):
     @staticmethod
     def show_message(parent, title: str, text: str) -> None:
         QMessageBox.information(parent, title, text)
+
+
+
+
 
 
