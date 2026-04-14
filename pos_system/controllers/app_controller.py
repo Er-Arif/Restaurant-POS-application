@@ -170,6 +170,7 @@ class AppController:
         )
         controller.load()
         window.logout_button.clicked.connect(self.show_login)
+        window.admin_panel_button.clicked.connect(lambda: self.show_admin(session_user))
         self.pos_window = window
         self.pos_controller = controller
         screen = self.app.primaryScreen()
@@ -229,5 +230,7 @@ class AppController:
         if not self.table_service.list_tables():
             self.table_service.initialize_tables(10, "T")
         self.seed_default_categories()
+
+
 
 

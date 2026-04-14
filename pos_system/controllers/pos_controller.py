@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidgetItem, QMessageBox, QPushButton, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+from pos_system.models.enums import UserRole
+
 
 
 class PosController:
@@ -38,6 +49,7 @@ class PosController:
         self.window.payment_method.currentTextChanged.connect(self.on_payment_method_changed)
         self.window.pay_button.clicked.connect(self.take_payment)
         self.window.cancel_order_button.clicked.connect(self.cancel_current_order)
+        self.window.admin_panel_button.setVisible(self.session_user.role == UserRole.ADMIN)
         self.cancel_shortcut.activated.connect(self.cancel_current_order)
         self.pay_shortcut.activated.connect(self.take_payment)
 
@@ -383,3 +395,5 @@ class PosController:
         self.window.service_charge_spin.setValue(0)
         self.window.amount_received.setValue(0)
         self.suppress_adjustment_autosave = False
+
+

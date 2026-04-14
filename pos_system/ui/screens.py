@@ -259,6 +259,7 @@ class AdminDashboardWindow(QMainWindow):
         self.brand_label.setStyleSheet("font-size: 20pt; font-weight: 700;")
         self.open_pos_button = QPushButton("Open POS")
         self.logout_button = QPushButton("Logout")
+        self.admin_panel_button = QPushButton("Admin Panel")
         header.addWidget(self.brand_label)
         header.addStretch(1)
         header.addWidget(self.open_pos_button)
@@ -658,6 +659,7 @@ class PosWindow(QMainWindow):
         top_meta_row = QHBoxLayout()
         self.user_label = QLabel("")
         self.logout_button = QPushButton("Logout")
+        self.admin_panel_button = QPushButton("Admin Panel")
         self.pay_button = QPushButton("Payment [F4]")
         self.cancel_order_button = QPushButton("Cancel [F3]")
         self.cancel_order_button.setToolTip("Shortcut: F3")
@@ -666,6 +668,7 @@ class PosWindow(QMainWindow):
         top_meta_row.addStretch(1)
         top_meta_row.addWidget(self.cancel_order_button)
         top_meta_row.addWidget(self.pay_button)
+        top_meta_row.addWidget(self.admin_panel_button)
         top_meta_row.addWidget(self.logout_button)
         self.order_meta = QLabel("Select a table to begin.")
 
@@ -767,6 +770,7 @@ class PosWindow(QMainWindow):
 
         self.category_bar.setMaximumHeight(category_height)
         self.logout_button.setMinimumHeight(top_button_height)
+        self.admin_panel_button.setMinimumHeight(top_button_height)
         self.cancel_order_button.setMinimumHeight(top_button_height)
         self.pay_button.setMinimumHeight(top_button_height)
         self.order_items_table.setMinimumHeight(order_table_height)
@@ -779,6 +783,7 @@ class PosWindow(QMainWindow):
     @staticmethod
     def show_message(parent, title: str, text: str) -> None:
         QMessageBox.information(parent, title, text)
+
 
 
 
